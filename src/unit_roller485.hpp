@@ -9,8 +9,8 @@
 
 #include "Arduino.h"
 
-#define UNIT_ROLLER_DEBUG Serial  // This macro definition can be annotated without sending and receiving data prints
-//      Define the serial port you want to use, e.g., Serial1 or Serial2
+// #define UNIT_ROLLER_DEBUG Serial  // This macro definition can be annotated without sending and receiving data prints
+//       Define the serial port you want to use, e.g., Serial1 or Serial2
 #if defined UNIT_ROLLER_DEBUG
 #define serialPrint(...)   UNIT_ROLLER_DEBUG.print(__VA_ARGS__)
 #define serialPrintln(...) UNIT_ROLLER_DEBUG.println(__VA_ARGS__)
@@ -203,7 +203,12 @@
 #define ROLLER485_I2C_SPEEDMODECURRENT_REG (0x50)
 
 /**
- * @brief Configure or read PID to set the register address in speed mode
+ * @brief This register reads back the current speed of the speed mode.
+ */
+#define ROLLER485_I2C_SPEEDMODE_READBACK_REG (0x60)
+
+/**
+ * @brief Configure or read PID to set the register address in speed mode.
  */
 #define ROLLER485_I2C_SPEEDMODEPID_REG (0x70)
 
@@ -213,7 +218,12 @@
 #define ROLLER485_I2C_POSITIONMODE_REG (0x80)
 
 /**
- * @brief Configure or read PID to set the register address in position mode
+ * @brief This register reads back the current postion of the position mode.
+ */
+#define ROLLER485_I2C_POSITIONMODE_READBACK_REG (0x90)
+
+/**
+ * @brief Configure or read PID to set the register address in position mode.
  */
 #define ROLLER485_I2C_POSITIONMODEPID_REG (0xA0)
 
@@ -221,6 +231,11 @@
  * @brief Current mode sets the current  or reads the register address.
  */
 #define ROLLER485_I2C_CURRENTMODE_REG (0xB0)
+
+/**
+ * @brief This register reads back the current of the current mode.
+ */
+#define ROLLER485_I2C_CURRENTMODE_READBACK_REG (0xC0)
 
 /**
  * @brief Register for storing the device ID in flash memory.
@@ -243,108 +258,792 @@ private:
     static const size_t BUFFER_SIZE = 128;
     char buffer[BUFFER_SIZE];
     uint8_t motorData[15] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-    uint8_t Readback[4] = {0x00, 0x00, 0x00, 0x00};
+    uint8_t Readback[4]   = {0x00, 0x00, 0x00, 0x00};
     // 485->i2c
     uint8_t readI2cNum1[5]  = {0x00, 0x00, 0x00, 0x00, 0x00};
     uint8_t readI2cNum2[8]  = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     uint8_t writeI2cNum[25] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+    /**
+    * @brief verifies UART response data
+    *
+    Verify received UART response data and check that its CRC checksum matches expectations.
+    * If needed, the first byte of the response and (if validation is enabled) protocol-specific bytes are also checked.
+    *
+    * @param responseBuffer Buffer of response data
+    * @param responseSize Size of response data (in bytes)
+    * @param expectedResponse the first byte of the expected response
+    * @param verifyResponse Whether additional response validation is enabled (e.g. I2C write/read operations)
+    *
+    * @return returns WRITE_stateif the validation succeeds, otherwise returns the corresponding error code
+    */
     int8_t verifyResponse(const char *responseBuffer, size_t responseSize, uint8_t expectedResponse,
                           bool verifyResponse);
+
+    /**
+     * @brief verifies that data is sent and received concurrently
+     *
+     * This function is responsible for sending the given data and waiting for the received response. If validation is
+     * enabled, the response data is also validated.
+     *
+     * @param data Pointer to the data to be sent
+     * @param length Length of the data
+     * @param verify Whether response verification is enabled
+     *
+     * @return The result or error code of the response validation
+     * -SERIAL_SEND_FAILURE: data fails to be sent
+     * -SERIAL_TIMEOUT: A timeout occurs while waiting for a response
+     * - Other values: The result of verifying the response (if the verification was stateful)
+     */
     int8_t verifyData(uint8_t *data, size_t length, bool verify);
+
+    /**
+     * @brief processes values
+     *
+     * Combines four bytes into a 32-bit integer and returns that value.
+     * This function is usually used to process raw data from encoders or other devices.
+     *
+     * @param byte0 Minimum valid byte
+     * @param byte1 Second byte
+     * @param byte2 Third byte
+     * @param byte3 Highest valid byte
+     *
+     * @return The combined 32-bit integer
+     */
     int32_t handleValue(uint8_t byte0, uint8_t byte1, uint8_t byte2, uint8_t byte3);
 
 public:
     HardwareSerial *serialPort;
 
+    /**
+     * @brief Initializes serial communication.
+     *
+     * This function initializes the hardware serial communication interface in the UnitRoller485 class.
+     *
+     * @param serial A pointer to a HardwareSerial object for serial communication.
+     * @param baud Baud rate: Specifies the rate of serial communication.
+     * @param config Configuration parameter.
+     * @param rxPin Receiving pin number.
+     * @param txPin Sending pin number.
+     * @param invert Whether to reverse the signal (for example, for RS-485 communication).
+     * @param timeout_ms Read timeout (in milliseconds).
+     * @param rxfifo_full_thrhd Received FIFO buffer full threshold.
+     */
     void begin(HardwareSerial *serial, unsigned long baud, uint32_t config = SERIAL_8N1, int8_t rxPin = -1,
                int8_t txPin = -1, bool invert = false, unsigned long timeout_ms = 10000UL,
                uint8_t rxfifo_full_thrhd = 112UL);
+
+    /**
+     * @brief Wait for the mutex to be unlocked
+     */
     void acquireMutex();
+
+    /**
+     * @brief Release the mutex
+     */
     void releaseMutex();
+
+    /**
+     * @brief sends data
+     *
+     * Send data through a serial port in the UnitRoller485 class.
+     *
+     * @param data points to a character pointer to send data
+     * @param length Length of the data to be sent
+     *
+     * @return true if the data is sent statefully. Otherwise return false
+     */
     bool sendData(const char *data, size_t length);
+
+    /**
+     * @brief reads data
+     *
+     * Reads data from a serial port in class UnitRoller485 and applies a timeout during the read.
+     * Read data is first stored in an internal buffer, and then specific header information (such as "AA 55") is
+     * removed.
+     *
+     * @return Number of bytes read statefully (excluding removed headers)
+     */
     size_t readData();
+
+    /**
+     * @brief calculates 8-bit CRC
+     *
+     * Calculates and returns an 8-bit CRC value based on the given data array and length.
+     *
+     * @param data Data array pointer that contains the data to calculate CRC
+     * @param len Length of the data array
+     *
+     * @return Calculated 8-bit CRC value
+     */
     uint8_t crc8(uint8_t *data, uint8_t len);
 
+    /**
+     * @brief Set motor enable or off
+     * @param id  Motor equipment id   Value range:0~255
+     * @param motorEn     motor enable or off
+     * @return The result or error code of the response validation
+     */
     int8_t setOutput(uint8_t id, bool motorEn);
+
+    /**
+     * @brief Set motor mode
+     * @param id  Motor equipment id   Value range:0~255
+     * @param mode    Mode setting   1: Speed Mode 2: Position Mode 3: Current
+     * Mode 4. Encoder Mode
+     * @return The result or error code of the response validation
+     */
     int8_t setMode(uint8_t id, uint8_t mode);
+
+    /**
+     * @brief Set Remove protection
+     * @param id  Motor equipment id   Value range:0~255
+     * @param protectionEn  Release Jam protection: Send 1 to unprotect
+     * @return The result or error code of the response validation
+     */
     int8_t setRemoveProtection(uint8_t id, bool protectionEn);
+
+    /**
+     * @brief Save to flash
+     * @param id  Motor equipment id   Value range:0~255
+     * @param saveFlashEn Save to flash: Send 1 save parameters to flash
+     * @return The result or error code of the response validation
+     */
     int8_t setSaveFlash(uint8_t id, bool saveFlashEn);
+
+    /**
+     * @brief Set encoder value
+     * @param id  Motor equipment id   Value range:0~255
+     * @param encoder  Encoder value(int32_t)
+     * @return The result or error code of the response validation
+     */
     int8_t setEncoder(uint8_t id, int32_t encoder);
+
+    /**
+     * @brief Set button switching mode enable
+     * @param id  Motor equipment id   Value range:0~255
+     * @param buttonEn  0: Off; 1: Press and hold for 5S to switch modes in running
+     * mode.
+     * @return The result or error code of the response validation
+     */
     int8_t setButton(uint8_t id, bool buttonEn);
+
+    /**
+     * @brief Set RGB (RGB Mode and RGB Brightness can be save to flash)
+     * @param id  Motor equipment id   Value range:0~255
+     * @param rgbR   Value range:0~255
+     * @param rgbG   Value range:0~255
+     * @param rgbB   Value range:0~255
+     * @param rgbBrightness   Value range:0~100
+     * @param rgbMode      Mode： 0, Sys-default 1,user-define    Default
+     * value：0
+     * @return The result or error code of the response validation
+     */
     int8_t setRGB(uint8_t id, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, uint8_t rgbBrightness, uint8_t rgbMode);
+
+    /**
+     * @brief Set baud rate (can be save to flash)
+     * @param id  Motor equipment id   Value range:0~255
+     * @param baudRate  BPS: 0,115200bps; 1, 19200bps; 2, 9600bps; Default
+     * value：0
+     * @return The result or error code of the response validation
+     */
     int8_t setBaudRate(uint8_t id, uint8_t baudRate);
+
+    /**
+     * @brief Set motor id (can be save to flash)
+     * @param id  Motor equipment id   Value range:0~255
+     * @param motorId     Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t setMotorId(uint8_t id, uint8_t motorId);
+
+    /**
+     * @brief Set motor jam protection
+     * @param id  Motor equipment id   Value range:0~255
+     * @param protectionEn    Motor Jam Protection: 0,Disable; 1, Enable
+     * @return The result or error code of the response validation
+     */
     int8_t setJamProtection(uint8_t id, bool protectionEn);
+
+    /**
+     * @brief  Set speed mode configur ation
+     * @param id  Motor equipment id   Value range:0~255
+     * @param speed      Speed  Value:-21000000 ~21000000
+     * @param current    current  Value:-1200 ~1200
+     * @return The result or error code of the response validation
+     */
     int32_t setSpeedMode(uint8_t id, int32_t speed, int32_t current);
+
+    /**
+     * @brief  Set the speed mode PID configuration
+     * @param id  Motor equipment id   Value range:0~255
+     * @param speedP    For example: mottor P=0.004, speedP setting
+     * value=0.004*100000=400,
+     * @param speedI    For example: mottor I=0.002, speedI setting
+     * value=0.002*10000000=20000,
+     * @param speedD    For example: mottor D=16.00, speedD setting
+     * value=16.00*100000=1600000,
+     * @return The result or error code of the response validation
+     */
     int32_t setSpeedPID(uint8_t id, uint32_t speedP, uint32_t speedI, uint32_t speedD);
+
+    /**
+     * @brief  Set position mode configur ation
+     * @param id  Motor equipment id   Value range:0~255
+     * @param position     Speed  Value:-21000000 ~21000000
+     * @param current    current  Value:-1200 ~1200
+     * @return The result or error code of the response validation
+     */
     int32_t setPositionMode(uint8_t id, int32_t position, int32_t current);
+
+    /**
+     * @brief  Set the position mode PID configuration
+     * @param id  Motor equipment id   Value range:0~255
+     * @param positionP    For example: mottor P=0.004, positionP setting
+     * value=0.004*100000=400,
+     * @param positionI    For example: mottor I=0.002, positionI setting
+     * value=0.002*10000000=20000,
+     * @param positionD    For example: mottor D=16.00, positionD setting
+     * value=16.00*100000=1600000,
+     * @return The result or error code of the response validation
+     */
     int32_t setPositionPID(uint8_t id, uint32_t positionP, uint32_t positionI, uint32_t positionD);
+
+    /**
+     * @brief  Set current mode configur ation
+     * @param id  Motor equipment id   Value range:0~255
+     * @param current    current  Value:-1200 ~1200
+     * @return The result or error code of the response validation
+     */
     int32_t setCurrentMode(uint8_t id, int32_t current);
 
+    /**
+     * @brief  Get motor speed
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int32_t getActualSpeed(uint8_t id);
+
+    /**
+     * @brief   Get motor position
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int32_t getActualPosition(uint8_t id);
+
+    /**
+     * @brief  Get motor current
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int32_t getActualCurrent(uint8_t id);
+
+    /**
+     * @brief  Get motor encoder
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int32_t getEncoder(uint8_t id);
+    /**
+     * @brief  Get motor vin
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int32_t getActualVin(uint8_t id);
+
+    /**
+     * @brief  Get motor temperature
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int32_t getActualTemp(uint8_t id);
+
+    /**
+     * @brief  Get motor id
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int32_t getMotorId(uint8_t id);
+
+    /**
+     * @brief  Get  motor speed PID
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getSpeedPID(uint8_t id, double *speedPID);
+
+    /**
+     * @brief  Get  motor position PID
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getPositionPID(uint8_t id, double *positionPID);
+
+    /**
+     * @brief  Get motor RGB  mode
+     * @param id  Motor equipment id   Value range:0~255
+     */
     int8_t getRGB(uint8_t id, uint8_t *rgbValues);
+
+    /**
+     * @brief  Get motor mode
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getMode(uint8_t id);
+
+    /**
+     * @brief  Get motor status
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getStatus(uint8_t id);
+
+    /**
+     * @brief  Get motor error
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getError(uint8_t id);
+
+    /**
+     * @brief  Get motor RGB  mode
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getRGBMode(uint8_t id);
+
+    /**
+     * @brief  Get motor RGB  rgbBrightness
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getRGBBrightness(uint8_t id);
+
+    /**
+     * @brief  Get motor baudrate
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getBaudRate(uint8_t id);
+
+    /**
+     * @brief  Get motor button
+     * @param id  Motor equipment id   Value range:0~255
+     * @return The result or error code of the response validation
+     */
     int8_t getButton(uint8_t id);
     // 485->i2c
+
+    /**
+     * @brief reads I2C device data
+     *
+     * Reads data from the I2C device with the specified ID, address, and data length, and stores the read data into the
+     * given read buffer.
+     *
+     * @param id ID of the I2C device
+     * @param address Indicates the address of the I2C device
+     * @param dataLen Length of data to be read
+     * @param readBuffer Buffer used to store the read data
+     *
+     * @return The number of bytes read statefully, and an error code if an error occurs
+     */
     int8_t readI2c(uint8_t id, uint8_t address, uint8_t dataLen, uint8_t *readBuffer);
+
+    /**
+     * @brief reads data from the I2C device
+     *
+     * Reads data from the I2C device with the specified ID, address, address length, register address, and data length,
+     * and stores the read data into the given read buffer.
+     *
+     * @param id ID of the I2C device
+     * @param address Base address of the I2C device
+     * @param addressLen The length of the address (usually 1 or 2, depending on the register address structure of the
+     * I2C device)
+     * @param regByte0 High byte of register address (if addressLen is 2, otherwise ignored)
+     * @param regByte1 Low byte of register address
+     * @param dataLen Length of data to be read
+     * @param readBuffer Buffer used to store the read data
+     *
+     * @return The number of bytes read statefully, and an error code if an error occurs
+     */
     int8_t readI2c(uint8_t id, uint8_t address, uint8_t addressLen, uint8_t regByte0, uint8_t regByte1, uint8_t dataLen,
                    uint8_t *readBuffer);
+
+    /**
+     * @brief  reads the motor speed PID from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @param speedPID Pointer to type double to store the read speedPID parameter
+     *
+     * @return Indicates the operation status code. 1 is returned if the operation succeeds. Otherwise, an error code is
+     * returned
+     */
     int8_t readSpeedPID(uint8_t id, uint8_t address, double *speedPID);
+
+    /**
+     * @brief  reads the motor postion PID from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @param positionPID Pointer to type double to store the read postionPID parameter
+     *
+     * @return Indicates the operation status code. 1 is returned if the operation succeeds. Otherwise, an error code is
+     * returned
+     */
     int8_t readPositionPID(uint8_t id, uint8_t address, double *positionPID);
+
+    /**
+     * @brief  reads the motor rgb from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @param rgbValues Pointer to type double to store the read rgbValues parameter
+     *
+     * @return Indicates the operation status code. 1 is returned if the operation succeeds. Otherwise, an error code is
+     * returned
+     */
     int8_t readRGB(uint8_t id, uint8_t address, uint8_t *rgbValues);
 
+    /**
+     * @brief reads the output from the I2C device
+     *
+     * Read the output value from the I2C device with the specified ID and address (possibly a motor configuration
+     * register).
+     *
+     * @param id   Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     *
+     * @return Read the output value and return an error code if an error occurs
+     */
     int8_t readOutput(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the mode from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the mode value and return an error code if an error occurs
+     */
     int8_t readMode(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the status from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the status value and return an error code if an error occurs
+     */
     int8_t readStatus(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the error from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device  Value range:0~127
+     * @return Read the error value and return an error code if an error occurs
+     */
     int8_t readError(uint8_t id, uint8_t address);
+
+    /**
+     * @brief   reads the button from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the button value and return an error code if an error occurs
+     */
     int8_t readButton(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the stall protection from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the stall protection value and return an error code if an error occurs
+     */
     int8_t readStallProtection(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor baud rate from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the baud rate value and return an error code if an error occurs
+     */
     int8_t readBaudRate(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor rgbbrightness from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the rgbbrightness value and return an error code if an error occurs
+     */
     int8_t readRgbBrightness(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor version from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the version value and return an error code if an error occurs
+     */
     int8_t readVersion(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor i2caAddress from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the i2caAddress value and return an error code if an error occurs
+     */
     int8_t readI2cAddress(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor id from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the id  value and return an error code if an error occurs
+     */
     int8_t readMotorId(uint8_t id, uint8_t address);
 
+    /**
+     * @brief  reads the motor speed from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the speed  value and return an error code if an error occurs
+     */
     int32_t readSpeed(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor speed current from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the speed current value and return an error code if an error occurs
+     */
     int32_t readSpeedCurrent(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor speed from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the actual speed readback  value and return an error code if an error occurs
+     */
+    int32_t readSpeedReadback(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor position from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the postion value and return an error code if an error occurs
+     */
     int32_t readPosition(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor position current from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the position current  value and return an error code if an error occurs
+     */
     int32_t readPositionCurrent(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor position from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the actual postion readback  value and return an error code if an error occurs
+     */
+    int32_t readPositionReadback(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor current from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the current value and return an error code if an error occurs
+     */
     int32_t readCurrent(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor current from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the actual current readback  value and return an error code if an error occurs
+     */
+    int32_t readCurrentReadback(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor encoder from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the encoder value and return an error code if an error occurs
+     */
     int32_t readEncoder(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor vin from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the vin value and return an error code if an error occurs
+     */
     int32_t readVin(uint8_t id, uint8_t address);
+
+    /**
+     * @brief  reads the motor temp from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the temp value and return an error code if an error occurs
+     */
     int32_t readTemp(uint8_t id, uint8_t address);
 
+    /**
+     * @brief  wirte i2c
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address
+     * @param data   Write data
+     * @param dataLen  Write data len
+     * @param stopBit  Stop bit  Usually false
+     */
     int8_t writeI2c(uint8_t id, uint8_t address, uint8_t *data, uint8_t dataLen, bool stopBit);
+
+    /**
+     * @brief  wirte i2c
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address
+     * @param addressLen Device address  i2c reg address len: 0, 1 byte address; 1, 2 bytes address
+     * i2c reg address:
+     * 1. i2c reg address len = 0, i2c reg address = i2c reg address bytes0
+     * 2. i2c reg address len = 1, i2creg address = i2c reg address bytes0 + (i2c reg address bytes1 * 255)
+     * @param regByte0  Register byte
+     * @param regByte1  Register byte
+     * @param data   Write data
+     * @param dataLen  Write data len
+     */
     int8_t writeI2c(uint8_t id, uint8_t address, uint8_t addressLen, uint8_t regByte0, uint8_t regByte1, uint8_t *data,
                     uint8_t dataLen);
+
+    /**
+     * @brief  write MotorConfig
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address
+     * @param motorEn    motor enable or off
+     * @param mode    Mode setting   1: Speed Mode 2: Position Mode 3: Current
+     * Mode 4. Encoder Mode
+     * @param removeProtection  Release Jam protection: Send 1 to unprotect
+     * @param buttonEn  0: Off; 1: Press and hold for 5S to switch modes in running
+     * mode.
+     * @param stallProtection   Motor Stall Protection:: 0,Disable; 1, Enable
+     * @return The result or error code of the response validation
+     */
     int8_t writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool removeProtection,
                             bool buttonEn, bool stallProtection);
+
+    /**
+     * @brief  write_disposition
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param motorId     Value range:0~255
+     * @param baudRate    BPS: 0,115200bps; 1, 19200bps; 2, 9600bps;    Default
+     value：0
+    * @param rgbBrightness   Value range:0~100
+    * @return The result or error code of the response validation
+    */
     int8_t writeDisposition(uint8_t id, uint8_t address, uint8_t motorId, uint8_t baudRate, uint8_t rgbBrightness);
+
+    /**
+     * @brief  write_speedMode
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address  Value range:0~127
+     * @param speed    Speed  Value:-21000000 ~21000000
+     * @return The result or error code of the response validation
+     */
     int8_t writeSpeedMode(uint8_t id, uint8_t address, int32_t speed);
+
+    /**
+     * @brief  write speedMode  current
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param current    current  Value:-1200 ~1200
+     * @return The result or error code of the response validation
+     */
     int8_t writeSpeedModeCurrent(uint8_t id, uint8_t address, int32_t current);
+
+    /**
+     * @brief  write speedMode PID
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param speedP    For example: mottor P=0.004, speedP setting
+     * value=0.004*100000=400,
+     * @param speedI    For example: mottor I=0.002, speedI setting
+     * value=0.002*10000000=20000,
+     * @param speedD    For example: mottor D=16.00, speedD setting
+     * value=16.00*100000=1600000,
+     * @return The result or error code of the response validation
+     */
     int8_t writeSpeedModePID(uint8_t id, uint8_t address, uint32_t speedP, uint32_t speedI, uint32_t speedD);
+
+    /**
+     * @brief  write positionMode
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param position   position  Value:-21000000 ~21000000
+     * @return The result or error code of the response validation
+     */
     int8_t writePositionMode(uint8_t id, uint8_t address, int32_t position);
+
+    /**
+     * @brief  write positionMode current
+     * @param address Device address   Value range:0~127
+     * @param id  Motor equipment id   Value range:0~255
+     * @param current    current  Value:-1200 ~1200
+     * @return The result or error code of the response validation
+     */
     int8_t writePositionModeCurrent(uint8_t id, uint8_t address, int32_t current);
+
+    /**
+     * @brief  write positionMode PID
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param positionP    For example: mottor P=0.004, position_P setting
+     * value=0.004*100000=400,
+     * @param positionI    For example: mottor I=0.002, position_I setting
+     * value=0.002*10000000=20000,
+     * @param positionD    For example: mottor D=16.00, position_D setting
+     * value=16.00*100000=1600000,
+     * @return The result or error code of the response validation
+     */
     int8_t writePositionModePID(uint8_t id, uint8_t address, uint32_t positionP, uint32_t positionI,
                                 uint32_t positionD);
+
+    /**
+     * @brief  write currentMode
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param current   current  Value:-1200 ~1200
+     * @return The result or error code of the response validation
+     */
     int8_t writeCurrentMode(uint8_t id, uint8_t address, int32_t current);
+
+    /**
+     * @brief  write setRGB
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param rgbR   Value range:0~255
+     * @param rgbG   Value range:0~255
+     * @param rgbB   Value range:0~255
+     * @param rgbModeRGB      Mode： 0, Sys-default 1, User-define    Default
+     * value：0
+     * @return The result or error code of the response validation
+     */
     int8_t writeSetRGB(uint8_t id, uint8_t address, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, uint8_t rgbMode);
+
+    /**
+     * @brief  write encoder
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param encoder    encoder  uint32_t
+     * @return The result or error code of the response validation
+     */
     int8_t writeEncoderMode(uint8_t id, uint8_t address, int32_t encoder);
+
+    /**
+     * @brief  write  i2c id
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Device address   Value range:0~127
+     * @param saveFlashEn Save to flash: Send 1 save parameters to flash
+     * @param newAddress  new address  Value range:0~127
+     * @return The result or error code of the response validation
+     */
     int8_t writeI2cId(uint8_t id, uint8_t address, bool saveFlashEn, uint8_t newAddress);
 };
 #endif

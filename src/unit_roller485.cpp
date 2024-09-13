@@ -6,19 +6,6 @@
 
 #include "unit_roller485.hpp"
 
-/**
-* @brief verifies UART response data
-*
-Verify received UART response data and check that its CRC checksum matches expectations.
-* If needed, the first byte of the response and (if validation is enabled) protocol-specific bytes are also checked.
-*
-* @param responseBuffer Buffer of response data
-* @param responseSize Size of response data (in bytes)
-* @param expectedResponse the first byte of the expected response
-* @param verifyResponse Whether additional response validation is enabled (e.g. I2C write/read operations)
-*
-* @return returns WRITE_stateif the validation succeeds, otherwise returns the corresponding error code
-*/
 int8_t UnitRoller485::verifyResponse(const char *responseBuffer, size_t responseSize, uint8_t expectedResponse,
                                      bool verifyResponse)
 {
@@ -52,21 +39,7 @@ int8_t UnitRoller485::verifyResponse(const char *responseBuffer, size_t response
     }
     return ROLLER485_WRITE_SUCCESS;
 }
-/**
- * @brief verifies that data is sent and received concurrently
- *
- * This function is responsible for sending the given data and waiting for the received response. If validation is
- * enabled, the response data is also validated.
- *
- * @param data Pointer to the data to be sent
- * @param length Length of the data
- * @param verify Whether response verification is enabled
- *
- * @return The result or error code of the response validation
- * -SERIAL_SEND_FAILURE: data fails to be sent
- * -SERIAL_TIMEOUT: A timeout occurs while waiting for a response
- * - Other values: The result of verifying the response (if the verification was stateful)
- */
+
 int8_t UnitRoller485::verifyData(uint8_t *data, size_t length, bool verify)
 {
     // Send data
@@ -87,19 +60,7 @@ int8_t UnitRoller485::verifyData(uint8_t *data, size_t length, bool verify)
     releaseMutex();
     return response;
 }
-/**
- * @brief processes values
- *
- * Combines four bytes into a 32-bit integer and returns that value.
- * This function is usually used to process raw data from encoders or other devices.
- *
- * @param byte0 Minimum valid byte
- * @param byte1 Second byte
- * @param byte2 Third byte
- * @param byte3 Highest valid byte
- *
- * @return The combined 32-bit integer
- */
+
 int32_t UnitRoller485::handleValue(uint8_t byte0, uint8_t byte1, uint8_t byte2, uint8_t byte3)
 {
     int32_t newNumerical = 0;
@@ -111,29 +72,13 @@ int32_t UnitRoller485::handleValue(uint8_t byte0, uint8_t byte1, uint8_t byte2, 
     return newNumerical;
 }
 
-/**
-* @brief initializes serial communication
-*
-Initialize the hardware serial communication interface in the UnitRoller485 class.
-*
-* @param serial A pointer to a HardwareSerial object for serial communication
-* @param baud Baud rate: Specifies the rate of serial communication
-* @param config configuration parameter
-* @param rxPin Receiving pin number
-* @param txPin Send pin number
-* @param invert Whether to reverse the signal (for example, for RS-485 communication)
-* @param timeout_ms Read timeout (in milliseconds)
-* @param rxfifo_full_thrhd Received FIFO buffer full threshold
-*/
 void UnitRoller485::begin(HardwareSerial *serial, unsigned long baud, uint32_t config, int8_t rxPin, int8_t txPin,
                           bool invert, unsigned long timeout_ms, uint8_t rxfifo_full_thrhd)
 {
     serialPort = serial;
     serialPort->begin(baud, SERIAL_8N1, rxPin, txPin, invert, timeout_ms, rxfifo_full_thrhd);
 }
-/**
- * @brief Wait for the mutex to be unlocked
- */
+
 void UnitRoller485::acquireMutex()
 {
     while (mutexLocked) {
@@ -141,23 +86,12 @@ void UnitRoller485::acquireMutex()
     }
     mutexLocked = true;
 }
-/**
- * @brief Release the mutex
- */
+
 void UnitRoller485::releaseMutex()
 {
     mutexLocked = false;
 }
-/**
- * @brief sends data
- *
- * Send data through a serial port in the UnitRoller485 class.
- *
- * @param data points to a character pointer to send data
- * @param length Length of the data to be sent
- *
- * @return true if the data is sent statefully. Otherwise return false
- */
+
 bool UnitRoller485::sendData(const char *data, size_t length)
 {
 #if defined UNIT_ROLLER_DEBUG
@@ -178,14 +112,6 @@ bool UnitRoller485::sendData(const char *data, size_t length)
     return true;
 }
 
-/**
- * @brief reads data
- *
- * Reads data from a serial port in class UnitRoller485 and applies a timeout during the read.
- * Read data is first stored in an internal buffer, and then specific header information (such as "AA 55") is removed.
- *
- * @return Number of bytes read statefully (excluding removed headers)
- */
 size_t UnitRoller485::readData()
 {
     memset(buffer, 0, BUFFER_SIZE);
@@ -212,7 +138,7 @@ size_t UnitRoller485::readData()
         }
     }
     bytesRead = writeIndex;  // Update bytesRead after cleaning
-// Print cleaned data
+    // Print cleaned data
 #if defined UNIT_ROLLER_DEBUG
     serialPrint("Received data after cleaning: ");
     for (size_t i = 0; i < bytesRead; i++) {
@@ -225,16 +151,7 @@ size_t UnitRoller485::readData()
 #endif
     return bytesRead;
 }
-/**
- * @brief calculates 8-bit CRC
- *
- * Calculates and returns an 8-bit CRC value based on the given data array and length.
- *
- * @param data Data array pointer that contains the data to calculate CRC
- * @param len Length of the data array
- *
- * @return Calculated 8-bit CRC value
- */
+
 uint8_t UnitRoller485::crc8(uint8_t *data, uint8_t len)
 {
     uint8_t crc, i;
@@ -250,12 +167,7 @@ uint8_t UnitRoller485::crc8(uint8_t *data, uint8_t len)
     }
     return crc;
 }
-/**
- * @brief Set motor enable or off
- * @param id  Motor equipment id   Value range:0~255
- * @param motorEn     motor enable or off
- * @return The result or error code of the response validation
- */
+
 int8_t UnitRoller485::setOutput(uint8_t id, bool motorEn)
 {
     acquireMutex();
@@ -269,13 +181,6 @@ int8_t UnitRoller485::setOutput(uint8_t id, bool motorEn)
     return state;
 }
 
-/**
- * @brief Set motor mode
- * @param id  Motor equipment id   Value range:0~255
- * @param mode    Mode setting   1: Speed Mode 2: Position Mode 3: Current
- * Mode 4. Encoder Mode
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setMode(uint8_t id, uint8_t mode)
 {
     acquireMutex();
@@ -289,12 +194,6 @@ int8_t UnitRoller485::setMode(uint8_t id, uint8_t mode)
     return state;
 }
 
-/**
- * @brief Set Remove protection
- * @param id  Motor equipment id   Value range:0~255
- * @param protectionEn  Release Jam protection: Send 1 to unprotect
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setRemoveProtection(uint8_t id, bool protectionEn)
 {
     acquireMutex();
@@ -308,12 +207,6 @@ int8_t UnitRoller485::setRemoveProtection(uint8_t id, bool protectionEn)
     return state;
 }
 
-/**
- * @brief Save to flash
- * @param id  Motor equipment id   Value range:0~255
- * @param saveFlashEn Save to flash: Send 1 save parameters to flash
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setSaveFlash(uint8_t id, bool saveFlashEn)
 {
     acquireMutex();
@@ -327,12 +220,6 @@ int8_t UnitRoller485::setSaveFlash(uint8_t id, bool saveFlashEn)
     return state;
 }
 
-/**
- * @brief Set encoder value
- * @param id  Motor equipment id   Value range:0~255
- * @param encoder  Encoder value(int32_t)
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setEncoder(uint8_t id, int32_t encoder)
 {
     acquireMutex();
@@ -349,13 +236,6 @@ int8_t UnitRoller485::setEncoder(uint8_t id, int32_t encoder)
     return state;
 }
 
-/**
- * @brief Set button switching mode enable
- * @param id  Motor equipment id   Value range:0~255
- * @param buttonEn  0: Off; 1: Press and hold for 5S to switch modes in running
- * mode.
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setButton(uint8_t id, bool buttonEn)
 {
     acquireMutex();
@@ -369,17 +249,6 @@ int8_t UnitRoller485::setButton(uint8_t id, bool buttonEn)
     return state;
 }
 
-/**
- * @brief Set RGB (RGB Mode and RGB Brightness can be save to flash)
- * @param id  Motor equipment id   Value range:0~255
- * @param rgbR   Value range:0~255
- * @param rgbG   Value range:0~255
- * @param rgbB   Value range:0~255
- * @param rgbBrightness   Value range:0~100
- * @param rgbMode      Mode： 0, Sys-default 1,user-define    Default
- * value：0
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setRGB(uint8_t id, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, uint8_t rgbBrightness,
                              uint8_t rgbMode)
 {
@@ -398,13 +267,6 @@ int8_t UnitRoller485::setRGB(uint8_t id, uint8_t rgbR, uint8_t rgbG, uint8_t rgb
     return state;
 }
 
-/**
- * @brief Set baud rate (can be save to flash)
- * @param id  Motor equipment id   Value range:0~255
- * @param baudRate  BPS: 0,115200bps; 1, 19200bps; 2, 9600bps; Default
- * value：0
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setBaudRate(uint8_t id, uint8_t baudRate)
 {
     acquireMutex();
@@ -427,12 +289,6 @@ int8_t UnitRoller485::setBaudRate(uint8_t id, uint8_t baudRate)
     return state;
 }
 
-/**
- * @brief Set motor id (can be save to flash)
- * @param id  Motor equipment id   Value range:0~255
- * @param motorId     Value range:0~255
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::setMotorId(uint8_t id, uint8_t motorId)
 {
     acquireMutex();
@@ -445,12 +301,7 @@ int8_t UnitRoller485::setMotorId(uint8_t id, uint8_t motorId)
     releaseMutex();
     return state;
 }
-/**
- * @brief Set motor jam protection
- * @param id  Motor equipment id   Value range:0~255
- * @param protectionEn    Motor Jam Protection: 0,Disable; 1, Enable
- * @return The result or error code of the response validation
- */
+
 int8_t UnitRoller485::setJamProtection(uint8_t id, bool protectionEn)
 {
     acquireMutex();
@@ -463,13 +314,7 @@ int8_t UnitRoller485::setJamProtection(uint8_t id, bool protectionEn)
     releaseMutex();
     return state;
 }
-/**
- * @brief  Set speed mode configur ation
- * @param id  Motor equipment id   Value range:0~255
- * @param speed      Speed  Value:-21000000 ~21000000
- * @param current    current  Value:-1200 ~1200
- * @return The result or error code of the response validation
- */
+
 int32_t UnitRoller485::setSpeedMode(uint8_t id, int32_t speed, int32_t current)
 {
     static const int32_t min        = -21000000;
@@ -497,17 +342,7 @@ int32_t UnitRoller485::setSpeedMode(uint8_t id, int32_t speed, int32_t current)
     releaseMutex();
     return state;
 }
-/**
- * @brief  Set the speed mode PID configuration
- * @param id  Motor equipment id   Value range:0~255
- * @param speedP    For example: mottor P=0.004, speedP setting
- * value=0.004*100000=400,
- * @param speedI    For example: mottor I=0.002, speedI setting
- * value=0.002*10000000=20000,
- * @param speedD    For example: mottor D=16.00, speedD setting
- * value=16.00*100000=1600000,
- * @return The result or error code of the response validation
- */
+
 int32_t UnitRoller485::setSpeedPID(uint8_t id, uint32_t speedP, uint32_t speedI, uint32_t speedD)
 {
     acquireMutex();
@@ -532,13 +367,6 @@ int32_t UnitRoller485::setSpeedPID(uint8_t id, uint32_t speedP, uint32_t speedI,
     return state;
 }
 
-/**
- * @brief  Set position mode configur ation
- * @param id  Motor equipment id   Value range:0~255
- * @param position     Speed  Value:-21000000 ~21000000
- * @param current    current  Value:-1200 ~1200
- * @return The result or error code of the response validation
- */
 int32_t UnitRoller485::setPositionMode(uint8_t id, int32_t position, int32_t current)
 {
     static const int32_t min        = -21000000;
@@ -566,17 +394,7 @@ int32_t UnitRoller485::setPositionMode(uint8_t id, int32_t position, int32_t cur
     releaseMutex();
     return state;
 }
-/**
- * @brief  Set the position mode PID configuration
- * @param id  Motor equipment id   Value range:0~255
- * @param positionP    For example: mottor P=0.004, positionP setting
- * value=0.004*100000=400,
- * @param positionI    For example: mottor I=0.002, positionI setting
- * value=0.002*10000000=20000,
- * @param positionD    For example: mottor D=16.00, positionD setting
- * value=16.00*100000=1600000,
- * @return The result or error code of the response validation
- */
+
 int32_t UnitRoller485::setPositionPID(uint8_t id, uint32_t positionP, uint32_t positionI, uint32_t positionD)
 {
     acquireMutex();
@@ -601,12 +419,6 @@ int32_t UnitRoller485::setPositionPID(uint8_t id, uint32_t positionP, uint32_t p
     return state;
 }
 
-/**
- * @brief  Set current mode configur ation
- * @param id  Motor equipment id   Value range:0~255
- * @param current    current  Value:-1200 ~1200
- * @return The result or error code of the response validation
- */
 int32_t UnitRoller485::setCurrentMode(uint8_t id, int32_t current)
 {
     static const int32_t currentMin = -1200;
@@ -627,11 +439,6 @@ int32_t UnitRoller485::setCurrentMode(uint8_t id, int32_t current)
     return state;
 }
 
-/**
- * @brief  Get motor speed
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
 int32_t UnitRoller485::getActualSpeed(uint8_t id)
 {
     acquireMutex();
@@ -649,11 +456,7 @@ int32_t UnitRoller485::getActualSpeed(uint8_t id)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief   Get motor position
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
+
 int32_t UnitRoller485::getActualPosition(uint8_t id)
 {
     acquireMutex();
@@ -671,11 +474,7 @@ int32_t UnitRoller485::getActualPosition(uint8_t id)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  Get motor current
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
+
 int32_t UnitRoller485::getActualCurrent(uint8_t id)
 {
     acquireMutex();
@@ -693,121 +492,7 @@ int32_t UnitRoller485::getActualCurrent(uint8_t id)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  Get motor mode
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int8_t UnitRoller485::getMode(uint8_t id)
-{
-    acquireMutex();
-    memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK0_CMD;
-    Readback[1]                    = id;
-    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
-    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
-    if (state != 1) {
-        releaseMutex();
-        return state;
-    }
-    uint8_t returnValue = 0;
-    returnValue         = buffer[14];
-    releaseMutex();
-    return returnValue;
-}
-/**
- * @brief  Get motor status
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int8_t UnitRoller485::getStatus(uint8_t id)
-{
-    acquireMutex();
-    memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK0_CMD;
-    Readback[1]                    = id;
-    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
-    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
-    if (state != 1) {
-        releaseMutex();
-        return state;
-    }
-    uint8_t returnValue = 0;
-    returnValue         = buffer[15];
-    releaseMutex();
-    return returnValue;
-}
-/**
- * @brief  Get motor error
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int8_t UnitRoller485::getError(uint8_t id)
-{
-    acquireMutex();
-    memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK0_CMD;
-    Readback[1]                    = id;
-    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
-    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
-    if (state != 1) {
-        releaseMutex();
-        return state;
-    }
-    uint8_t returnValue = 0;
-    returnValue         = buffer[16];
-    releaseMutex();
-    return returnValue;
-}
-/**
- * @brief  Get motor vin
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int32_t UnitRoller485::getActualVin(uint8_t id)
-{
-    acquireMutex();
-    memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK1_CMD;
-    Readback[1]                    = id;
-    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
-    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
-    if (state != 1) {
-        releaseMutex();
-        return state;
-    }
-    int32_t returnValue = 0;
-    returnValue         = handleValue(buffer[2], buffer[3], buffer[4], buffer[5]) / 100.0f;
-    releaseMutex();
-    return returnValue;
-}
-/**
- * @brief  Get motor temperature
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int32_t UnitRoller485::getActualTemp(uint8_t id)
-{
-    acquireMutex();
-    memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK1_CMD;
-    Readback[1]                    = id;
-    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
-    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
-    if (state != 1) {
-        releaseMutex();
-        return state;
-    }
-    int32_t returnValue = 0;
-    returnValue         = handleValue(buffer[6], buffer[7], buffer[8], buffer[9]);
-    releaseMutex();
-    return returnValue;
-}
-/**
- * @brief  Get motor encoder
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
+
 int32_t UnitRoller485::getEncoder(uint8_t id)
 {
     acquireMutex();
@@ -826,16 +511,47 @@ int32_t UnitRoller485::getEncoder(uint8_t id)
     return returnValue;
 }
 
-/**
- * @brief  Get motor RGB  mode
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int8_t UnitRoller485::getRGBMode(uint8_t id)
+int32_t UnitRoller485::getActualVin(uint8_t id)
 {
     acquireMutex();
     memset(Readback, 0, sizeof(Readback));
     Readback[0]                    = ROLLER485_READ_BACK1_CMD;
+    Readback[1]                    = id;
+    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
+    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    int32_t returnValue = 0;
+    returnValue         = handleValue(buffer[2], buffer[3], buffer[4], buffer[5]) / 100.0f;
+    releaseMutex();
+    return returnValue;
+}
+
+int32_t UnitRoller485::getActualTemp(uint8_t id)
+{
+    acquireMutex();
+    memset(Readback, 0, sizeof(Readback));
+    Readback[0]                    = ROLLER485_READ_BACK1_CMD;
+    Readback[1]                    = id;
+    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
+    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    int32_t returnValue = 0;
+    returnValue         = handleValue(buffer[6], buffer[7], buffer[8], buffer[9]);
+    releaseMutex();
+    return returnValue;
+}
+
+int32_t UnitRoller485::getMotorId(uint8_t id)
+{
+    acquireMutex();
+    memset(Readback, 0, sizeof(Readback));
+    Readback[0]                    = ROLLER485_READ_BACK3_CMD;
     Readback[1]                    = id;
     Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
     int8_t state                   = verifyData(Readback, sizeof(Readback), false);
@@ -848,33 +564,7 @@ int8_t UnitRoller485::getRGBMode(uint8_t id)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  Get motor RGB  rgbBrightness
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int8_t UnitRoller485::getRGBBrightness(uint8_t id)
-{
-    acquireMutex();
-    memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK1_CMD;
-    Readback[1]                    = id;
-    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
-    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
-    if (state != 1) {
-        releaseMutex();
-        return state;
-    }
-    uint8_t returnValue = 0;
-    returnValue         = buffer[15];
-    releaseMutex();
-    return returnValue;
-}
-/**
- * @brief  Get  motor speed PID
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
+
 int8_t UnitRoller485::getSpeedPID(uint8_t id, double *speedPID)
 {
     acquireMutex();
@@ -895,10 +585,26 @@ int8_t UnitRoller485::getSpeedPID(uint8_t id, double *speedPID)
     return state;
 }
 
-/**
- * @brief  Get motor RGB  mode
- * @param id  Motor equipment id   Value range:0~255
- */
+int8_t UnitRoller485::getPositionPID(uint8_t id, double *positionPID)
+{
+    acquireMutex();
+    memset(Readback, 0, sizeof(Readback));
+    Readback[0]                    = ROLLER485_READ_BACK3_CMD;
+    Readback[1]                    = id;
+    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
+    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    int32_t returnValue = 0;
+    positionPID[0]      = handleValue(buffer[2], buffer[3], buffer[4], buffer[5]) / 100000.0f;
+    positionPID[1]      = handleValue(buffer[6], buffer[7], buffer[8], buffer[9]) / 10000000.0f;
+    positionPID[2]      = handleValue(buffer[10], buffer[11], buffer[12], buffer[13]) / 100000.0f;
+    releaseMutex();
+    return state;
+}
+
 int8_t UnitRoller485::getRGB(uint8_t id, uint8_t *rgbValues)
 {
     acquireMutex();
@@ -919,40 +625,11 @@ int8_t UnitRoller485::getRGB(uint8_t id, uint8_t *rgbValues)
     return state;
 }
 
-/**
- * @brief  Get  motor position PID
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int8_t UnitRoller485::getPositionPID(uint8_t id, double *positionPID)
+int8_t UnitRoller485::getMode(uint8_t id)
 {
     acquireMutex();
     memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK3_CMD;
-    Readback[1]                    = id;
-    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
-    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
-    if (state != 1) {
-        releaseMutex();
-        return state;
-    }
-    int32_t returnValue = 0;
-    positionPID[0]      = handleValue(buffer[2], buffer[3], buffer[4], buffer[5]) / 100000.0f;
-    positionPID[1]      = handleValue(buffer[6], buffer[7], buffer[8], buffer[9]) / 10000000.0f;
-    positionPID[2]      = handleValue(buffer[10], buffer[11], buffer[12], buffer[13]) / 100000.0f;
-    releaseMutex();
-    return state;
-}
-/**
- * @brief  Get motor id
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
-int32_t UnitRoller485::getMotorId(uint8_t id)
-{
-    acquireMutex();
-    memset(Readback, 0, sizeof(Readback));
-    Readback[0]                    = ROLLER485_READ_BACK3_CMD;
+    Readback[0]                    = ROLLER485_READ_BACK0_CMD;
     Readback[1]                    = id;
     Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
     int8_t state                   = verifyData(Readback, sizeof(Readback), false);
@@ -966,11 +643,78 @@ int32_t UnitRoller485::getMotorId(uint8_t id)
     return returnValue;
 }
 
-/**
- * @brief  Get motor baudrate
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
+int8_t UnitRoller485::getStatus(uint8_t id)
+{
+    acquireMutex();
+    memset(Readback, 0, sizeof(Readback));
+    Readback[0]                    = ROLLER485_READ_BACK0_CMD;
+    Readback[1]                    = id;
+    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
+    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    uint8_t returnValue = 0;
+    returnValue         = buffer[15];
+    releaseMutex();
+    return returnValue;
+}
+
+int8_t UnitRoller485::getError(uint8_t id)
+{
+    acquireMutex();
+    memset(Readback, 0, sizeof(Readback));
+    Readback[0]                    = ROLLER485_READ_BACK0_CMD;
+    Readback[1]                    = id;
+    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
+    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    uint8_t returnValue = 0;
+    returnValue         = buffer[16];
+    releaseMutex();
+    return returnValue;
+}
+
+int8_t UnitRoller485::getRGBMode(uint8_t id)
+{
+    acquireMutex();
+    memset(Readback, 0, sizeof(Readback));
+    Readback[0]                    = ROLLER485_READ_BACK1_CMD;
+    Readback[1]                    = id;
+    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
+    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    uint8_t returnValue = 0;
+    returnValue         = buffer[14];
+    releaseMutex();
+    return returnValue;
+}
+
+int8_t UnitRoller485::getRGBBrightness(uint8_t id)
+{
+    acquireMutex();
+    memset(Readback, 0, sizeof(Readback));
+    Readback[0]                    = ROLLER485_READ_BACK1_CMD;
+    Readback[1]                    = id;
+    Readback[sizeof(Readback) - 1] = crc8(Readback, sizeof(Readback) - 1);
+    int8_t state                   = verifyData(Readback, sizeof(Readback), false);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    uint8_t returnValue = 0;
+    returnValue         = buffer[15];
+    releaseMutex();
+    return returnValue;
+}
+
 int8_t UnitRoller485::getBaudRate(uint8_t id)
 {
     acquireMutex();
@@ -988,11 +732,7 @@ int8_t UnitRoller485::getBaudRate(uint8_t id)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  Get motor button
- * @param id  Motor equipment id   Value range:0~255
- * @return The result or error code of the response validation
- */
+
 int8_t UnitRoller485::getButton(uint8_t id)
 {
     acquireMutex();
@@ -1011,19 +751,6 @@ int8_t UnitRoller485::getButton(uint8_t id)
     return returnValue;
 }
 
-/**
- * @brief reads I2C device data
- *
- * Reads data from the I2C device with the specified ID, address, and data length, and stores the read data into the
- * given read buffer.
- *
- * @param id ID of the I2C device
- * @param address Indicates the address of the I2C device
- * @param dataLen Length of data to be read
- * @param readBuffer Buffer used to store the read data
- *
- * @return The number of bytes read statefully, and an error code if an error occurs
- */
 int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t dataLen, uint8_t *readBuffer)
 {
     acquireMutex();
@@ -1059,23 +786,6 @@ int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t dataLen, uint
     return bytesRead;
 }
 
-/**
- * @brief reads data from the I2C device
- *
- * Reads data from the I2C device with the specified ID, address, address length, register address, and data length, and
- * stores the read data into the given read buffer.
- *
- * @param id ID of the I2C device
- * @param address Base address of the I2C device
- * @param addressLen The length of the address (usually 1 or 2, depending on the register address structure of the I2C
- * device)
- * @param regByte0 High byte of register address (if addressLen is 2, otherwise ignored)
- * @param regByte1 Low byte of register address
- * @param dataLen Length of data to be read
- * @param readBuffer Buffer used to store the read data
- *
- * @return The number of bytes read statefully, and an error code if an error occurs
- */
 int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t addressLen, uint8_t regByte0, uint8_t regByte1,
                               uint8_t dataLen, uint8_t *readBuffer)
 {
@@ -1115,17 +825,6 @@ int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t addressLen, u
     return bytesRead;
 }
 
-/**
- * @brief reads the output from the I2C device
- *
- * Read the output value from the I2C device with the specified ID and address (possibly a motor configuration
- * register).
- *
- * @param id   Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- *
- * @return Read the output value and return an error code if an error occurs
- */
 int8_t UnitRoller485::readOutput(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1146,12 +845,7 @@ int8_t UnitRoller485::readOutput(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the mode from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the mode value and return an error code if an error occurs
- */
+
 int8_t UnitRoller485::readMode(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1172,12 +866,7 @@ int8_t UnitRoller485::readMode(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the status from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the status value and return an error code if an error occurs
- */
+
 int8_t UnitRoller485::readStatus(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1198,12 +887,7 @@ int8_t UnitRoller485::readStatus(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the error from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device  Value range:0~127
- * @return Read the error value and return an error code if an error occurs
- */
+
 int8_t UnitRoller485::readError(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1224,12 +908,7 @@ int8_t UnitRoller485::readError(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief   reads the button from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the button value and return an error code if an error occurs
- */
+
 int8_t UnitRoller485::readButton(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1250,12 +929,7 @@ int8_t UnitRoller485::readButton(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the stall protection from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the stall protection value and return an error code if an error occurs
- */
+
 int8_t UnitRoller485::readStallProtection(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1276,12 +950,7 @@ int8_t UnitRoller485::readStallProtection(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the motor id from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the id  value and return an error code if an error occurs
- */
+
 int8_t UnitRoller485::readMotorId(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1302,12 +971,7 @@ int8_t UnitRoller485::readMotorId(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the motor baud rate from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the baud rate value and return an error code if an error occurs
- */
+
 int8_t UnitRoller485::readBaudRate(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1329,12 +993,6 @@ int8_t UnitRoller485::readBaudRate(uint8_t id, uint8_t address)
     return returnValue;
 }
 
-/**
- * @brief  reads the motor rgbbrightness from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the rgbbrightness value and return an error code if an error occurs
- */
 int8_t UnitRoller485::readRgbBrightness(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1356,12 +1014,6 @@ int8_t UnitRoller485::readRgbBrightness(uint8_t id, uint8_t address)
     return returnValue;
 }
 
-/**
- * @brief  reads the motor speed from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the speed  value and return an error code if an error occurs
- */
 int32_t UnitRoller485::readSpeed(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1382,12 +1034,7 @@ int32_t UnitRoller485::readSpeed(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the motor speed current from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the speed current value and return an error code if an error occurs
- */
+
 int32_t UnitRoller485::readSpeedCurrent(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1409,15 +1056,27 @@ int32_t UnitRoller485::readSpeedCurrent(uint8_t id, uint8_t address)
     return returnValue;
 }
 
-/**
- * @brief  reads the motor speed PID from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @param speedPID Pointer to type double to store the read speedPID parameter
- *
- * @return Indicates the operation status code. 1 is returned if the operation succeeds. Otherwise, an error code is
- * returned
- */
+int32_t UnitRoller485::readSpeedReadback(uint8_t id, uint8_t address)
+{
+    acquireMutex();
+    memset(readI2cNum2, 0, sizeof(readI2cNum2));
+    readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
+    readI2cNum2[1]                       = id;
+    readI2cNum2[2]                       = address;
+    readI2cNum2[4]                       = ROLLER485_I2C_SPEEDMODE_READBACK_REG;
+    readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
+    readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
+    int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    int32_t returnValue = 0;
+    returnValue         = handleValue(buffer[8], buffer[9], buffer[10], buffer[11]) / 100.0f;
+    releaseMutex();
+    return returnValue;
+}
+
 int8_t UnitRoller485::readSpeedPID(uint8_t id, uint8_t address, double *speedPID)
 {
     acquireMutex();
@@ -1440,12 +1099,6 @@ int8_t UnitRoller485::readSpeedPID(uint8_t id, uint8_t address, double *speedPID
     return state;
 }
 
-/**
- * @brief  reads the motor position from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the postion value and return an error code if an error occurs
- */
 int32_t UnitRoller485::readPosition(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1466,12 +1119,7 @@ int32_t UnitRoller485::readPosition(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the motor position current from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the position current  value and return an error code if an error occurs
- */
+
 int32_t UnitRoller485::readPositionCurrent(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1492,15 +1140,28 @@ int32_t UnitRoller485::readPositionCurrent(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the motor postion PID from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @param positionPID Pointer to type double to store the read postionPID parameter
- *
- * @return Indicates the operation status code. 1 is returned if the operation succeeds. Otherwise, an error code is
- * returned
- */
+
+int32_t UnitRoller485::readPositionReadback(uint8_t id, uint8_t address)
+{
+    acquireMutex();
+    memset(readI2cNum2, 0, sizeof(readI2cNum2));
+    readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
+    readI2cNum2[1]                       = id;
+    readI2cNum2[2]                       = address;
+    readI2cNum2[4]                       = ROLLER485_I2C_POSITIONMODE_READBACK_REG;
+    readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
+    readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
+    int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    int32_t returnValue = 0;
+    returnValue         = handleValue(buffer[8], buffer[9], buffer[10], buffer[11]) / 100.0f;
+    releaseMutex();
+    return returnValue;
+}
+
 int8_t UnitRoller485::readPositionPID(uint8_t id, uint8_t address, double *positionPID)
 {
     acquireMutex();
@@ -1522,12 +1183,7 @@ int8_t UnitRoller485::readPositionPID(uint8_t id, uint8_t address, double *posit
     releaseMutex();
     return state;
 }
-/**
- * @brief  reads the motor current from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the current value and return an error code if an error occurs
- */
+
 int32_t UnitRoller485::readCurrent(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1549,15 +1205,27 @@ int32_t UnitRoller485::readCurrent(uint8_t id, uint8_t address)
     return returnValue;
 }
 
-/**
- * @brief  reads the motor rgb from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @param rgbValues Pointer to type double to store the read rgbValues parameter
- *
- * @return Indicates the operation status code. 1 is returned if the operation succeeds. Otherwise, an error code is
- * returned
- */
+int32_t UnitRoller485::readCurrentReadback(uint8_t id, uint8_t address)
+{
+    acquireMutex();
+    memset(readI2cNum2, 0, sizeof(readI2cNum2));
+    readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
+    readI2cNum2[1]                       = id;
+    readI2cNum2[2]                       = address;
+    readI2cNum2[4]                       = ROLLER485_I2C_CURRENTMODE_READBACK_REG;
+    readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
+    readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
+    int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    int32_t returnValue = 0;
+    returnValue         = handleValue(buffer[8], buffer[9], buffer[10], buffer[11]) / 100.0f;
+    releaseMutex();
+    return returnValue;
+}
+
 int8_t UnitRoller485::readRGB(uint8_t id, uint8_t address, uint8_t *rgbValues)
 {
     acquireMutex();
@@ -1582,12 +1250,6 @@ int8_t UnitRoller485::readRGB(uint8_t id, uint8_t address, uint8_t *rgbValues)
     return state;
 }
 
-/**
- * @brief  reads the motor vin from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the vin value and return an error code if an error occurs
- */
 int32_t UnitRoller485::readVin(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1608,12 +1270,7 @@ int32_t UnitRoller485::readVin(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the motor temp from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the temp value and return an error code if an error occurs
- */
+
 int32_t UnitRoller485::readTemp(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1634,12 +1291,7 @@ int32_t UnitRoller485::readTemp(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  reads the motor encoder from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the encoder value and return an error code if an error occurs
- */
+
 int32_t UnitRoller485::readEncoder(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1661,12 +1313,6 @@ int32_t UnitRoller485::readEncoder(uint8_t id, uint8_t address)
     return returnValue;
 }
 
-/**
- * @brief  reads the motor version from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the version value and return an error code if an error occurs
- */
 int8_t UnitRoller485::readVersion(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1688,12 +1334,6 @@ int8_t UnitRoller485::readVersion(uint8_t id, uint8_t address)
     return returnValue;
 }
 
-/**
- * @brief  reads the motor i2caAddress from the I2C device
- * @param id  Motor equipment id   Value range:0~255
- * @param address Address of the I2C device Value range:0~127
- * @return Read the i2caAddress value and return an error code if an error occurs
- */
 int8_t UnitRoller485::readI2cAddress(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1714,14 +1354,7 @@ int8_t UnitRoller485::readI2cAddress(uint8_t id, uint8_t address)
     releaseMutex();
     return returnValue;
 }
-/**
- * @brief  wirte i2c
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address
- * @param data   Write data
- * @param dataLen  Write data len
- * @param stopBit  Stop bit  Usually false
- */
+
 int8_t UnitRoller485::writeI2c(uint8_t id, uint8_t address, uint8_t *data, uint8_t dataLen, bool stopBit)
 {
     acquireMutex();
@@ -1739,19 +1372,7 @@ int8_t UnitRoller485::writeI2c(uint8_t id, uint8_t address, uint8_t *data, uint8
     releaseMutex();
     return state;
 }
-/**
- * @brief  wirte i2c
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address
- * @param addressLen Device address  i2c reg address len: 0, 1 byte address; 1, 2 bytes address
- * i2c reg address:
- * 1. i2c reg address len = 0, i2c reg address = i2c reg address bytes0
- * 2. i2c reg address len = 1, i2creg address = i2c reg address bytes0 + (i2c reg address bytes1 * 255)
- * @param regByte0  Register byte
- * @param regByte1  Register byte
- * @param data   Write data
- * @param dataLen  Write data len
- */
+
 int8_t UnitRoller485::writeI2c(uint8_t id, uint8_t address, uint8_t addressLen, uint8_t regByte0, uint8_t regByte1,
                                uint8_t *data, uint8_t dataLen)
 {
@@ -1773,19 +1394,6 @@ int8_t UnitRoller485::writeI2c(uint8_t id, uint8_t address, uint8_t addressLen, 
     return state;
 }
 
-/**
- * @brief  write MotorConfig
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address
- * @param motorEn    motor enable or off
- * @param mode    Mode setting   1: Speed Mode 2: Position Mode 3: Current
- * Mode 4. Encoder Mode
- * @param removeProtection  Release Jam protection: Send 1 to unprotect
- * @param buttonEn  0: Off; 1: Press and hold for 5S to switch modes in running
- * mode.
- * @param stallProtection   Motor Stall Protection:: 0,Disable; 1, Enable
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool removeProtection,
                                        bool buttonEn, bool stallProtection)
 {
@@ -1807,16 +1415,6 @@ int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn
     return state;
 }
 
-/**
- * @brief  write_disposition
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param motorId     Value range:0~255
- * @param baudRate    BPS: 0,115200bps; 1, 19200bps; 2, 9600bps;    Default
- value：0
- * @param rgbBrightness   Value range:0~100
- * @return The result or error code of the response validation
-*/
 int8_t UnitRoller485::writeDisposition(uint8_t id, uint8_t address, uint8_t motorId, uint8_t baudRate,
                                        uint8_t rgbBrightness)
 {
@@ -1836,13 +1434,6 @@ int8_t UnitRoller485::writeDisposition(uint8_t id, uint8_t address, uint8_t moto
     return state;
 }
 
-/**
- * @brief  write_speedMode
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address  Value range:0~127
- * @param speed    Speed  Value:-21000000 ~21000000
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeSpeedMode(uint8_t id, uint8_t address, int32_t speed)
 {
     static const int32_t min = -21000000;
@@ -1866,13 +1457,6 @@ int8_t UnitRoller485::writeSpeedMode(uint8_t id, uint8_t address, int32_t speed)
     return state;
 }
 
-/**
- * @brief  write speedMode  current
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param current    current  Value:-1200 ~1200
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeSpeedModeCurrent(uint8_t id, uint8_t address, int32_t current)
 {
     static const int32_t currentMin = -1200;
@@ -1896,18 +1480,6 @@ int8_t UnitRoller485::writeSpeedModeCurrent(uint8_t id, uint8_t address, int32_t
     return state;
 }
 
-/**
- * @brief  write speedMode PID
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param speedP    For example: mottor P=0.004, speedP setting
- * value=0.004*100000=400,
- * @param speedI    For example: mottor I=0.002, speedI setting
- * value=0.002*10000000=20000,
- * @param speedD    For example: mottor D=16.00, speedD setting
- * value=16.00*100000=1600000,
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeSpeedModePID(uint8_t id, uint8_t address, uint32_t speedP, uint32_t speedI, uint32_t speedD)
 {
     acquireMutex();
@@ -1935,13 +1507,6 @@ int8_t UnitRoller485::writeSpeedModePID(uint8_t id, uint8_t address, uint32_t sp
     return state;
 }
 
-/**
- * @brief  write positionMode
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param position   position  Value:-21000000 ~21000000
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writePositionMode(uint8_t id, uint8_t address, int32_t position)
 {
     static const int32_t min = -21000000;
@@ -1965,13 +1530,6 @@ int8_t UnitRoller485::writePositionMode(uint8_t id, uint8_t address, int32_t pos
     return state;
 }
 
-/**
- * @brief  write positionMode current
- * @param address Device address   Value range:0~127
- * @param id  Motor equipment id   Value range:0~255
- * @param current    current  Value:-1200 ~1200
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writePositionModeCurrent(uint8_t id, uint8_t address, int32_t current)
 {
     static const int32_t currentMin = -1200;
@@ -1995,18 +1553,6 @@ int8_t UnitRoller485::writePositionModeCurrent(uint8_t id, uint8_t address, int3
     return state;
 }
 
-/**
- * @brief  write positionMode PID
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param positionP    For example: mottor P=0.004, position_P setting
- * value=0.004*100000=400,
- * @param positionI    For example: mottor I=0.002, position_I setting
- * value=0.002*10000000=20000,
- * @param positionD    For example: mottor D=16.00, position_D setting
- * value=16.00*100000=1600000,
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writePositionModePID(uint8_t id, uint8_t address, uint32_t positionP, uint32_t positionI,
                                            uint32_t positionD)
 {
@@ -2035,13 +1581,6 @@ int8_t UnitRoller485::writePositionModePID(uint8_t id, uint8_t address, uint32_t
     return state;
 }
 
-/**
- * @brief  write currentMode
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param current   current  Value:-1200 ~1200
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeCurrentMode(uint8_t id, uint8_t address, int32_t current)
 {
     static const int32_t currentMin = -1200;
@@ -2065,17 +1604,6 @@ int8_t UnitRoller485::writeCurrentMode(uint8_t id, uint8_t address, int32_t curr
     return state;
 }
 
-/**
- * @brief  write setRGB
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param rgbR   Value range:0~255
- * @param rgbG   Value range:0~255
- * @param rgbB   Value range:0~255
- * @param rgbModeRGB      Mode： 0, Sys-default 1, User-define    Default
- * value：0
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeSetRGB(uint8_t id, uint8_t address, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB,
                                   uint8_t rgbMode)
 {
@@ -2095,13 +1623,6 @@ int8_t UnitRoller485::writeSetRGB(uint8_t id, uint8_t address, uint8_t rgbR, uin
     return state;
 }
 
-/**
- * @brief  write encoder
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param encoder    encoder  uint32_t
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeEncoderMode(uint8_t id, uint8_t address, int32_t encoder)
 {
     acquireMutex();
@@ -2121,14 +1642,6 @@ int8_t UnitRoller485::writeEncoderMode(uint8_t id, uint8_t address, int32_t enco
     return state;
 }
 
-/**
- * @brief  write  i2c id
- * @param id  Motor equipment id   Value range:0~255
- * @param address Device address   Value range:0~127
- * @param saveFlashEn Save to flash: Send 1 save parameters to flash
- * @param newAddress  new address  Value range:0~127
- * @return The result or error code of the response validation
- */
 int8_t UnitRoller485::writeI2cId(uint8_t id, uint8_t address, bool saveFlashEn, uint8_t newAddress)
 {
     acquireMutex();
