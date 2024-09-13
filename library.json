@@ -1,0 +1,22 @@
+{
+    "name": "M5UnitRoller",
+    "description": "Library for M5Stack M5Unit Roller",
+    "keywords": "M5UnitRoller",
+    "authors": {
+        "name": "M5Stack",
+        "url": "http://www.m5stack.com"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/m5stack/M5Unit-Roller.git"
+    },
+    "version": "0.0.1",
+    "frameworks": [
+        "arduino"
+    ],
+    "platforms": [
+        "espressif32",
+        "native"
+    ]
+
+}

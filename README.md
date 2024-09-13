@@ -2,47 +2,15 @@
 
 ## Overview
 
-### SKU:xxx
+### SKU:U182-Lite
 
-Description of the product
+**Roller485 Unit** is an integrated brushless DC motor motion control kit designed for efficient motion control. It supports 6-16V DC power input (via PWR485 interface) or 5V input (via Grove interface) and can automatically adjust power coefficients to ensure optimal performance. It features a built-in **FOC** closed-loop drive system, utilizing a 3504 200KV brushless motor. Without forced cooling, it can operate with a maximum continuous phase current of 0.5A and a short-term current of 1A. The driver uses a magnetic encoder for feedback and supports current, speed, and position control, ensuring precise control.
+Additionally, the device is equipped with a 0.66-inch **OLED** display on the back to display the device's status in real-time. It also includes an RGB indicator light and function button for easy human-computer interaction. The product's base is designed with LEGO-compatible mounting holes and M3 screw holes, making it easy to assemble and integrate. Roller485 Unit’s hardware and software are fully open-source, supporting motion control and parameter adjustment through **RS485** or **I2C** buses. It also offers SWD and SWO debugging interfaces, providing developers with greater flexibility. This product is widely used in robotic joints, motion control, industrial automation, and visual demonstration projects.
 
 ## Related Link
 
 - [Document & Datasheet](https://docs.m5stack.com/en/unit/product_Link)
 
-## Required Libraries:
-
-- [Adafruit_BMP280_Library](https://github.com/adafruit/Required_Libraries_Link)
-
 ## License
 
 - [Product Name- MIT](LICENSE)
-
-## Remaining steps(Editorial Staff Look,After following the steps, remember to delete all the content below)
-
-1. Change [clang format check path](./.github/workflows/clang-format-check.yml#L9-L15).
-2. Add License content to [LICENSE](/LICENSE).
-3. Change link on line 78 of [bug-report.yml](./.github/ISSUE_TEMPLATE/bug-report.yml#L78).
-
-```cpp
-Example
-# M5Unit-ENV
-
-## Overview
-
-### SKU:U001 & U001-B & U001-C
-
-Contains M5Stack-**UNIT ENV** series related case programs.ENV is an environmental sensor with integrated SHT30 and QMP6988 internally to detect temperature, humidity, and atmospheric pressure data.
-
-## Related Link
-
-- [Document & Datasheet](https://docs.m5stack.com/en/unit/envIII)
-
-## Required Libraries:
-
-- [Adafruit_BMP280_Library](https://github.com/adafruit/Adafruit_BMP280_Library)
-
-## License
-
-- [M5Unit-ENV - MIT](LICENSE)
-```
