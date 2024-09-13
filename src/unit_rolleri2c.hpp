@@ -10,8 +10,8 @@
 #include "Arduino.h"
 #include "Wire.h"
 
-//#define UNIT_ROLLER_DEBUG Serial  // This macro definition can be annotated without sending and receiving data prints
-//       Define the serial port you want to use, e.g., Serial1 or Serial2
+// #define UNIT_ROLLER_DEBUG Serial  // This macro definition can be annotated without sending and receiving data prints
+//        Define the serial port you want to use, e.g., Serial1 or Serial2
 #if defined UNIT_ROLLER_DEBUG
 #define serialPrint(...)   UNIT_ROLLER_DEBUG.print(__VA_ARGS__)
 #define serialPrintln(...) UNIT_ROLLER_DEBUG.println(__VA_ARGS__)
@@ -240,7 +240,7 @@ private:
      *       from the device. Check the return status of endTransmission() if needed.
      */
     void writeBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length);
-    
+
     /**
      * @brief Reads a sequence of bytes from a specific register on a device.
      *
@@ -258,7 +258,7 @@ private:
      *       Ensure that the device at the given address is ready to provide the requested data.
      */
     void readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length);
-    
+
     /**
      * @brief Converts a float value to an array of bytes.
      *
@@ -289,7 +289,6 @@ private:
     void floatToBytes(float s, uint8_t *d);
 
 public:
-
     /**
      * @brief Initializes the UnitRollerI2C object with I2C communication settings.
      *

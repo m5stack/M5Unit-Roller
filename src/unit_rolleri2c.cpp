@@ -220,13 +220,11 @@ void UnitRollerI2C::setKeySwitchMode(uint8_t en)
     writeBytes(_addr, reg, (uint8_t *)&en, 1);
 }
 
-
 void UnitRollerI2C::setStallProtection(uint8_t en)
 {
     uint8_t reg = UNIT_ROLLERI2C_STALL_PROTECTION_REG;
     writeBytes(_addr, reg, (uint8_t *)&en, 1);
 }
-
 
 uint8_t UnitRollerI2C::setI2CAddress(uint8_t addr)
 {
@@ -299,7 +297,6 @@ int32_t UnitRollerI2C::getPos(void)
     readBytes(_addr, reg, (uint8_t *)&data, 4);
     return data;
 }
-
 
 int32_t UnitRollerI2C::getPosMaxCurrent(void)
 {
