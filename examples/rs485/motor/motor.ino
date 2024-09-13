@@ -7,7 +7,8 @@ HardwareSerial mySerial(1);  // Create a hardware serial port object
 #define motor485Id 0x00
 uint8_t rgbValues[3];  // Array to store R, G, B values
 double speedPID[3];    // Array to   P I D values
-void setup() {
+void setup()
+{
     M5.begin();
     // Call the begin function and pass arguments
     Roller485.begin(&mySerial, 115200, SERIAL_8N1, 22, 21, false, 10000UL, 112U);
@@ -19,7 +20,8 @@ void setup() {
     Roller485.setOutput(motor485Id, 0x01);
 }
 
-void loop() {
+void loop()
+{
     int errorCode = Roller485.setMode(motor485Id, 0x01);
     if (errorCode == 1) {
         // Successful operation

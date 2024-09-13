@@ -3,14 +3,15 @@
 UnitRollerI2C RollerI2C;  // Create a UNIT_ROLLERI2C object
 uint32_t p, i, d;         // Defines a variable to store the PID value
 uint8_t r, g, b;
-void setup() {
+void setup()
+{
     M5.begin();
     RollerI2C.begin(&Wire, 0x64, 21, 22, 400000);
 }
 
-void loop() {
-    
-    //current mode
+void loop()
+{
+    // current mode
     RollerI2C.setMode(3);
     RollerI2C.setCurrent(120000);
     RollerI2C.setOutput(1);
@@ -35,7 +36,7 @@ void loop() {
     printf("actualPos: %d\n", RollerI2C.getPosReadback());
     delay(5000);
 
-    //speed mode
+    // speed mode
     RollerI2C.setOutput(0);
     RollerI2C.setMode(1);
     RollerI2C.setSpeed(240000);
@@ -94,7 +95,7 @@ void loop() {
     delay(100);
     printf("Button switching mode enable:%d\n", RollerI2C.getKeySwitchMode());
     delay(100);
-    RollerI2C.getRGB(&r,&g,&b);
+    RollerI2C.getRGB(&r, &g, &b);
     printf("RGB-R: 0x%02X  RGB-G: 0x%02X  RGB-B: 0x%02X\n", r, g, b);
     delay(5000);
 }

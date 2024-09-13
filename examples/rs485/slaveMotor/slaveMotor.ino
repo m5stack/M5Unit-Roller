@@ -8,7 +8,8 @@ HardwareSerial mySerial(1);  // Create a hardware serial port object
 #define slaveI2cAddress 0x64
 uint8_t slaveRgbValues[4];  // Array to store R, G, B ,mode values
 double slaveSpeedPID[3];    // Array to P I D values
-void setup() {
+void setup()
+{
     M5.begin();
     // Call the begin function and pass arguments
     Roller485.begin(&mySerial, 115200, SERIAL_8N1, 22, 21, false, 10000UL, 112U);
@@ -33,7 +34,8 @@ void setup() {
     //  Roller485.writeCurrentMode(motor485Id, slaveI2cAddress, 800);
 }
 
-void loop() {
+void loop()
+{
     int errorCode = Roller485.setMode(motor485Id, 0x01);
     if (errorCode == 1) {
         // Successful operation

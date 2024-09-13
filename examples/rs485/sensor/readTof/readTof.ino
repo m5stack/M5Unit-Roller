@@ -8,13 +8,15 @@ HardwareSerial mySerial(1);  // Create a hardware serial port object
 #define tofI2cAddress 0x29
 uint8_t readBuffer[128];
 static uint8_t tofWrite[] = {0x00, 0x01};
-void setup() {
+void setup()
+{
     M5.begin();
     // Call the begin function and pass arguments
     Roller485.begin(&mySerial, 115200, SERIAL_8N1, 22, 21, false, 10000UL, 112U);
 }
 
-void loop() {
+void loop()
+{
     uint8_t errorWrite = Roller485.writeI2c(motor485Id, tofI2cAddress, tofWrite, sizeof(tofWrite), 0);
     if (errorWrite != 1) {
         // Print error code
