@@ -9,8 +9,8 @@ Additionally, the device is equipped with a 0.66-inch **OLED** display on the ba
 
 ## Related Link
 
-- [Document & Datasheet](https://docs.m5stack.com/en/unit/product_Link)
+- [Document & Datasheet](https://docs.m5stack.com/en/unit/Unit-Roller485)
 
 ## License
 
-- [Product Name- MIT](LICENSE)
+- [MIT](LICENSE)
