@@ -207,6 +207,19 @@ void UnitRollerI2C::setBPS(uint8_t bps)
     writeBytes(_addr, reg, (uint8_t *)&bps, 1);
 }
 
+void UnitRollerI2C::saveConfigToFlash(void)
+{
+    uint8_t data = 1;
+    uint8_t reg  = UNIT_ROLLERI2C_SAVE_FLASH_REG;
+    writeBytes(_addr, reg, (uint8_t *)&data, 1);
+}
+
+void UnitRollerI2C::posRangeProtect(uint8_t en)
+{
+    uint8_t reg = UNIT_ROLLERI2C_POS_RANGE_PROTECT_REG;
+    writeBytes(_addr, reg, (uint8_t *)&en, 1);
+}
+
 void UnitRollerI2C::resetStalledProtect(void)
 {
     uint8_t data = 1;
@@ -372,6 +385,14 @@ uint8_t UnitRollerI2C::getErrorCode(void)
     uint8_t reg  = UNIT_ROLLERI2C_ERROR_CODE_REG;
     readBytes(_addr, reg, (uint8_t *)&data, 1);
 
+    return data;
+}
+
+uint8_t UnitRollerI2C::getPosRangeProtect(void)
+{
+    uint8_t data = 0;
+    uint8_t reg  = UNIT_ROLLERI2C_POS_RANGE_PROTECT_REG;
+    readBytes(_addr, reg, (uint8_t *)&data, 1);
     return data;
 }
 

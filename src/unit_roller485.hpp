@@ -751,6 +751,14 @@ public:
     int8_t readButton(uint8_t id, uint8_t address);
 
     /**
+     * @brief  reads the motor position over range protection from the I2C device
+     * @param id  Motor equipment id   Value range:0~255
+     * @param address Address of the I2C device Value range:0~127
+     * @return Read the motor position over range protection value and return an error code if an error occurs
+     */
+    int8_t readRangeProtection(uint8_t id, uint8_t address);
+
+    /**
      * @brief  reads the stall protection from the I2C device
      * @param id  Motor equipment id   Value range:0~255
      * @param address Address of the I2C device Value range:0~127
@@ -919,14 +927,15 @@ public:
      * @param motorEn    motor enable or off
      * @param mode    Mode setting   1: Speed Mode 2: Position Mode 3: Current
      * Mode 4. Encoder Mode
+     * @param rangeProtection   Motor Position Over Range Protection: 0,Disable; 1, Enable
      * @param removeProtection  Release Jam protection: Send 1 to unprotect
      * @param buttonEn  0: Off; 1: Press and hold for 5S to switch modes in running
      * mode.
      * @param stallProtection   Motor Stall Protection:: 0,Disable; 1, Enable
      * @return The result or error code of the response validation
      */
-    int8_t writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool removeProtection,
-                            bool buttonEn, bool stallProtection);
+    int8_t writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool rangeProtection,
+                            bool removeProtection, bool buttonEn, bool stallProtection);
 
     /**
      * @brief  write_disposition

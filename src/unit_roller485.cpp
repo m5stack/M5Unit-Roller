@@ -930,6 +930,27 @@ int8_t UnitRoller485::readButton(uint8_t id, uint8_t address)
     return returnValue;
 }
 
+int8_t UnitRoller485::readRangeProtection(uint8_t id, uint8_t address)
+{
+    acquireMutex();
+    memset(readI2cNum2, 0, sizeof(readI2cNum2));
+    readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
+    readI2cNum2[1]                       = id;
+    readI2cNum2[2]                       = address;
+    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
+    readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
+    int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
+    if (state != 1) {
+        releaseMutex();
+        return state;
+    }
+    uint8_t returnValue = 0;
+    returnValue         = buffer[18];
+    releaseMutex();
+    return returnValue;
+}
+
 int8_t UnitRoller485::readStallProtection(uint8_t id, uint8_t address)
 {
     acquireMutex();
@@ -1394,8 +1415,8 @@ int8_t UnitRoller485::writeI2c(uint8_t id, uint8_t address, uint8_t addressLen, 
     return state;
 }
 
-int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool removeProtection,
-                                       bool buttonEn, bool stallProtection)
+int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool rangeProtection,
+                                       bool removeProtection, bool buttonEn, bool stallProtection)
 {
     acquireMutex();
     memset(writeI2cNum, 0, sizeof(writeI2cNum));
@@ -1406,9 +1427,10 @@ int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn
     writeI2cNum[8]                       = ROLLER485_I2C_MOTORCONFIG_REG;
     writeI2cNum[9]                       = motorEn;
     writeI2cNum[10]                      = mode;
-    writeI2cNum[11]                      = removeProtection;
-    writeI2cNum[12]                      = buttonEn;
-    writeI2cNum[13]                      = stallProtection;
+    writeI2cNum[11]                      = rangeProtection;
+    writeI2cNum[12]                      = removeProtection;
+    writeI2cNum[13]                      = buttonEn;
+    writeI2cNum[14]                      = stallProtection;
     writeI2cNum[sizeof(writeI2cNum) - 1] = crc8(writeI2cNum, sizeof(writeI2cNum) - 1);
     int8_t state                         = verifyData(writeI2cNum, sizeof(writeI2cNum), true);
     releaseMutex();

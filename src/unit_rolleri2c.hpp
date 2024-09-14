@@ -42,6 +42,14 @@
 #define UNIT_ROLLERI2C_MODE_REG (0x01)
 
 /**
+ * @brief Motor Position Over Range Protection:
+ *
+ * This register can be used to set the motor position out of range protection
+ * mechanism.
+ */
+#define UNIT_ROLLERI2C_POS_RANGE_PROTECT_REG (0x0A)
+
+/**
  * @brief Reset Stalled Protection Register.
  *
  * This register can be used to reset the stalled protection mechanism.
@@ -637,6 +645,25 @@ public:
     void saveConfigToFlash(void);
 
     /**
+     * @brief Set the motor position range protection mechanism.
+     *
+     * This function enables or disables the position range protection mechanism
+     * for the motor.
+     *
+     * @param en A uint8_t value to enable (1) or disable (0) the protection
+     * mechanism.
+     *           - 0: Disable
+     *           - 1: Enable
+     *
+     * @details This function writes the specified value to a designated register
+     * to control the position range protection of the motor during operation. The
+     * protection mechanism helps prevent the motor from exceeding its safe
+     * operating range, avoiding potential damage.
+     *
+     * @return void
+     */
+    void posRangeProtect(uint8_t en);
+    /**
      * @brief Resets the stalled protection mechanism of the UnitRollerI2C device.
      *
      * This function writes a specific value to the stalled protection reset register
@@ -1009,6 +1036,25 @@ public:
      *       has been properly initialized before calling this function.
      */
     uint8_t getErrorCode(void);
+
+    /**
+     * @brief Get the current state of the motor position range protection
+     * mechanism.
+     *
+     * This function reads the status of the position range protection mechanism
+     * for the motor.
+     *
+     * @details The function retrieves the value from a designated register,
+     * indicating whether the position range protection is enabled or disabled.
+     * The returned value can be used to determine the current state of the
+     * protection mechanism:
+     *          - 0: Disabled
+     *          - 1: Enabled
+     *
+     * @return uint8_t The current state of the position range protection (0 or
+     * 1).
+     */
+    uint8_t getPosRangeProtect(void);
 
     /**
      * @brief Retrieves the current status of the stall protection feature
