@@ -11,7 +11,7 @@ void setup()
 {
     M5.begin();
     // Call the begin function and pass arguments
-    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 16, 17,-1, false, 10000UL, 112U);
+    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 16, 17, -1, false, 10000UL, 112U);
     // Set the motor mode to speed
     Roller485.setMode(motor485Id, ROLLER_MODE_SPEED);
     // Set speed Speed and current
@@ -22,7 +22,7 @@ void setup()
 
 void loop()
 {
-    int errorCode = Roller485.setMode(motor485Id,ROLLER_MODE_SPEED);
+    int errorCode = Roller485.setMode(motor485Id, ROLLER_MODE_SPEED);
     if (errorCode == 1) {
         // Successful operation
         Serial.println("setMode() successful.");
