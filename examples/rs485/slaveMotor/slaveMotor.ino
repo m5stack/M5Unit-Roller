@@ -12,7 +12,7 @@ void setup()
 {
     M5.begin();
     // Call the begin function and pass arguments
-    Roller485.begin(&mySerial, 115200, SERIAL_8N1,16, 17,-1, false, 10000UL, 112U);
+    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 16, 17, -1, false, 10000UL, 112U);
     // Set the motor mode to speed
     Roller485.setMode(motor485Id, ROLLER_MODE_SPEED);
     // Set speed Speed and current
@@ -21,7 +21,7 @@ void setup()
     Roller485.setOutput(motor485Id, 0x01);
 
     // Set the speed mode of the slave motor
-    Roller485.writeMotorConfig(motor485Id, slaveI2cAddress,false, ROLLER_MODE_SPEED,true,true,false, true);
+    Roller485.writeMotorConfig(motor485Id, slaveI2cAddress, false, ROLLER_MODE_SPEED, true, true, false, true);
     Roller485.writeSpeedMode(motor485Id, slaveI2cAddress, 1000);
     Roller485.writeSpeedModeCurrent(motor485Id, slaveI2cAddress, 1200);
     // set  position
@@ -87,7 +87,7 @@ void loop()
     int32_t current = Roller485.readCurrent(motor485Id, slaveI2cAddress);
     Serial.printf("current: %d\n", current);
     delay(1000);
-    Roller485.writeSetRGB(motor485Id, slaveI2cAddress,0xff,0xff,0xff,ROLLER_RGB_MODE_USER_DEFINED );
+    Roller485.writeSetRGB(motor485Id, slaveI2cAddress, 0xff, 0xff, 0xff, ROLLER_RGB_MODE_USER_DEFINED);
     delay(1000);
     int8_t errorRGB = Roller485.readRGB(motor485Id, slaveI2cAddress, slaveRgbValues);
     if (errorRGB != 1) {
@@ -98,7 +98,7 @@ void loop()
         printf("RGB values: R=%d, G=%d, B=%d  Mode:%d\n", slaveRgbValues[0], slaveRgbValues[1], slaveRgbValues[2],
                slaveRgbValues[3]);
     }
-    Roller485.writeSetRGB(motor485Id, slaveI2cAddress,0x00,0x00,0x00,ROLLER_RGB_MODE_DEFAULT );
+    Roller485.writeSetRGB(motor485Id, slaveI2cAddress, 0x00, 0x00, 0x00, ROLLER_RGB_MODE_DEFAULT);
     int32_t vin = Roller485.readVin(motor485Id, slaveI2cAddress);
     Serial.printf("vin: %d\n", vin);
     delay(1000);
@@ -115,9 +115,8 @@ void loop()
     Serial.printf("i2cAddress: %d\n", i2cAddress);
     delay(1000);
 
-    Roller485.writeMotorConfig(motor485Id, slaveI2cAddress,false, ROLLER_MODE_ENCODER,true,true,false, true);
+    Roller485.writeMotorConfig(motor485Id, slaveI2cAddress, false, ROLLER_MODE_ENCODER, true, true, false, true);
 
-    Roller485.writeEncoderMode(motor485Id, slaveI2cAddress,24000);
-    Serial.printf("readEncoder: %d\n",  Roller485.readEncoder(motor485Id, slaveI2cAddress));
-
+    Roller485.writeEncoderMode(motor485Id, slaveI2cAddress, 24000);
+    Serial.printf("readEncoder: %d\n", Roller485.readEncoder(motor485Id, slaveI2cAddress));
 }

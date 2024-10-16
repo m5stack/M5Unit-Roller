@@ -1028,7 +1028,7 @@ int32_t UnitRoller485::readSpeed(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = I2C_SPEED_REG ;
+    readI2cNum2[4]                       = I2C_SPEED_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1176,7 +1176,7 @@ int8_t UnitRoller485::readPositionPID(uint8_t id, uint8_t address, double *posit
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = I2C_POS_PID_REG ;
+    readI2cNum2[4]                       = I2C_POS_PID_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1401,8 +1401,8 @@ int8_t UnitRoller485::writeI2c(uint8_t id, uint8_t address, uint8_t addressLen, 
     return state;
 }
 
-int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, roller_mode_t mode, bool rangeProtection,
-                                       bool removeProtection, bool buttonEn, bool stallProtection)
+int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, roller_mode_t mode,
+                                       bool rangeProtection, bool removeProtection, bool buttonEn, bool stallProtection)
 {
     acquireMutex();
     memset(writeI2cNum, 0, sizeof(writeI2cNum));
@@ -1423,7 +1423,7 @@ int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn
     return state;
 }
 
-int8_t UnitRoller485::writeDisposition(uint8_t id, uint8_t address, uint8_t motorId,roller_bps_t baudRate,
+int8_t UnitRoller485::writeDisposition(uint8_t id, uint8_t address, uint8_t motorId, roller_bps_t baudRate,
                                        uint8_t rgbBrightness)
 {
     acquireMutex();
