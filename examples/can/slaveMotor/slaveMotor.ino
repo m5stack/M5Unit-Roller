@@ -76,7 +76,7 @@ void setup()
 
     delay(3000);
     rollercan.writeOutput(motorID, slaveI2cAddress, false);
-    rollercan.writeRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_USER_DEFINED );
+    rollercan.writeRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_USER_DEFINED);
     Serial.printf("readRGBMode:%d\r\n", rollercan.readRGBMode(motorID, slaveI2cAddress));
 
     rollercan.writeRGBBrightness(motorID, slaveI2cAddress, 100);
@@ -93,7 +93,7 @@ void setup()
     delay(2000);
     rollercan.writeRGB(motorID, slaveI2cAddress, BLUE);
     delay(2000);
-    rollercan.writeRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_USER_DEFINED );
+    rollercan.writeRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_USER_DEFINED);
     Serial.printf("readActualVin:%d\r\n", rollercan.readActualVin(motorID, slaveI2cAddress));
 
     Serial.printf("readActualTemp:%d\r\n", rollercan.readActualTemp(motorID, slaveI2cAddress));
@@ -163,7 +163,7 @@ void setup()
 
     delay(3000);
     rollercan.writeRawOutput(motorID, slaveI2cAddress, false);
-    rollercan.writeRawRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_USER_DEFINED );
+    rollercan.writeRawRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_USER_DEFINED);
     delay(1000);
     Serial.printf("readRawRGBMode:%d\r\n", rollercan.readRawRGBMode(motorID, slaveI2cAddress));
 
@@ -182,7 +182,7 @@ void setup()
     delay(2000);
     rollercan.writeRawRGB(motorID, slaveI2cAddress, BLUE);
     delay(2000);
-    rollercan.writeRawRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_DEFAULT );
+    rollercan.writeRawRGBMode(motorID, slaveI2cAddress, ROLLER_RGB_MODE_DEFAULT);
     Serial.printf("readActualVin:%d\r\n", rollercan.readRawActualVin(motorID, slaveI2cAddress));
     Serial.printf("readActualTemp:%d\r\n", rollercan.readRawActualTemp(motorID, slaveI2cAddress));
     Serial.printf("FirmwareVersion:%d\r\n", rollercan.readRawFirmwareVersion(motorID, slaveI2cAddress));

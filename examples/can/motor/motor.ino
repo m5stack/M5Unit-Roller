@@ -1,7 +1,7 @@
 #include "unit_rollercan.hpp"
 #include <M5Unified.h>
-UnitRollerCAN rollercan;       // Create a UNIT_ROLLERCAN object
-const uint8_t motorID = 0xA8;  
+UnitRollerCAN rollercan;  // Create a UNIT_ROLLERCAN object
+const uint8_t motorID = 0xA8;
 
 uint8_t slaveRgbValues[3];  // Array to store R, G, B ,mode values
 void setup()
@@ -66,7 +66,7 @@ void setup()
     delay(2000);
     rollercan.setMotorID(0x64, motorID);
     delay(1000);
-    rollercan.setRGBMode(motorID, ROLLER_RGB_MODE_USER_DEFINED );
+    rollercan.setRGBMode(motorID, ROLLER_RGB_MODE_USER_DEFINED);
     Serial.printf("getRGBMode:%d\r\n", rollercan.getRGBMode(motorID));
 
     rollercan.setRGBBrightness(motorID, 100);
@@ -83,7 +83,7 @@ void setup()
     delay(2000);
     rollercan.setRGB(motorID, BLUE);
     delay(2000);
-    rollercan.setRGBMode(motorID, ROLLER_RGB_MODE_DEFAULT );
+    rollercan.setRGBMode(motorID, ROLLER_RGB_MODE_DEFAULT);
     rollercan.setMode(motorID, ROLLER_MODE_ENCODER);
     rollercan.setCurrent(motorID, 1200);
     Serial.printf("getCurrent:%d\r\n", rollercan.getCurrent(motorID));
