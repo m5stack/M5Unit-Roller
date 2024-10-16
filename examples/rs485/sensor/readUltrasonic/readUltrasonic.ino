@@ -13,7 +13,7 @@ void setup()
 {
     M5.begin();
     // Call the begin function and pass arguments
-    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 16, 17, false, 10000UL, 112U);
+    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 16, 17, -1, false, 10000UL, 112U);
 }
 
 void loop()

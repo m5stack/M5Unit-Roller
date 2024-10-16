@@ -18,7 +18,7 @@ int8_t UnitRoller485::verifyResponse(const char *responseBuffer, size_t response
         serialPrint("CRC check failed. Data may be corrupted.\n");
 #else
 #endif
-        return ROLLER485_CRC_CHECK_FAIL;  // CRC check failed
+        return ROLLER_CRC_CHECK_FAIL;  // CRC check failed
     }
     // Check if response matches expected
     if (responseBuffer[0] != expectedResponse) {
@@ -26,7 +26,7 @@ int8_t UnitRoller485::verifyResponse(const char *responseBuffer, size_t response
         serialPrint("Unexpected response received.\n");
 #else
 #endif
-        return ROLLER485_UNEXPECTED_RESPONSE;  // Unexpected response
+        return ROLLER_UNEXPECTED_RESPONSE;  // Unexpected response
     }
     if (verifyResponse) {
         if (responseBuffer[2] != 1) {
@@ -34,10 +34,10 @@ int8_t UnitRoller485::verifyResponse(const char *responseBuffer, size_t response
             serialPrint("I2C write or read failed\n");
 #else
 #endif
-            return ROLLER485_WRITE_FAILED;
+            return ROLLER_WRITE_FAILED;
         }
     }
-    return ROLLER485_WRITE_SUCCESS;
+    return ROLLER_WRITE_SUCCESS;
 }
 
 int8_t UnitRoller485::verifyData(uint8_t *data, size_t length, bool verify)
@@ -45,7 +45,7 @@ int8_t UnitRoller485::verifyData(uint8_t *data, size_t length, bool verify)
     // Send data
     if (!sendData(reinterpret_cast<const char *>(data), length)) {
         releaseMutex();
-        return ROLLER485_SERIAL_SEND_FAILURE;  // Failed to send data
+        return ROLLER_SERIAL_SEND_FAILURE;  // Failed to send data
     }
     size_t bytesRead = readData();
     if (bytesRead <= 0) {
@@ -54,42 +54,23 @@ int8_t UnitRoller485::verifyData(uint8_t *data, size_t length, bool verify)
 #else
 #endif
         releaseMutex();
-        return ROLLER485_SERIAL_TIMEOUT;
+        return ROLLER_SERIAL_TIMEOUT;
     }
     int response = verifyResponse(buffer, bytesRead, data[0] + 0x10, verify);
     releaseMutex();
     return response;
 }
 
-int32_t UnitRoller485::handleValue(uint8_t byte0, uint8_t byte1, uint8_t byte2, uint8_t byte3)
-{
-    int32_t newNumerical = 0;
-    // Combine bytes to form the encoder value
-    newNumerical |= ((int32_t)byte0);  // LSB
-    newNumerical |= ((int32_t)byte1 << 8);
-    newNumerical |= ((int32_t)byte2 << 16);
-    newNumerical |= ((int32_t)byte3 << 24);  // MSB
-    return newNumerical;
-}
-
 void UnitRoller485::begin(HardwareSerial *serial, unsigned long baud, uint32_t config, int8_t rxPin, int8_t txPin,
-                          bool invert, unsigned long timeout_ms, uint8_t rxfifo_full_thrhd)
+                          int8_t dirPin, bool invert, unsigned long timeout_ms, uint8_t rxfifo_full_thrhd)
 {
-    serialPort = serial;
+    serialPort   = serial;
+    this->dirPin = dirPin;
     serialPort->begin(baud, SERIAL_8N1, rxPin, txPin, invert, timeout_ms, rxfifo_full_thrhd);
-}
-
-void UnitRoller485::acquireMutex()
-{
-    while (mutexLocked) {
-        delay(1);
+    if (dirPin != -1) {
+        pinMode(dirPin, OUTPUT);
+        digitalWrite(dirPin, HIGH);
     }
-    mutexLocked = true;
-}
-
-void UnitRoller485::releaseMutex()
-{
-    mutexLocked = false;
 }
 
 bool UnitRoller485::sendData(const char *data, size_t length)
@@ -104,11 +85,16 @@ bool UnitRoller485::sendData(const char *data, size_t length)
     serialPrintln();
 #else
 #endif
+    if (dirPin != -1) {
+        digitalWrite(dirPin, HIGH);
+    }
     size_t bytesSent = serialPort->write(reinterpret_cast<const uint8_t *>(data), length);
     if (bytesSent != length) {
         return false;
     }
-    delay(200);
+    if (dirPin != -1) {
+        digitalWrite(dirPin, LOW);
+    }
     return true;
 }
 
@@ -181,7 +167,7 @@ int8_t UnitRoller485::setOutput(uint8_t id, bool motorEn)
     return state;
 }
 
-int8_t UnitRoller485::setMode(uint8_t id, uint8_t mode)
+int8_t UnitRoller485::setMode(uint8_t id, roller_mode_t mode)
 {
     acquireMutex();
     memset(motorData, 0, sizeof(motorData));
@@ -250,7 +236,7 @@ int8_t UnitRoller485::setButton(uint8_t id, bool buttonEn)
 }
 
 int8_t UnitRoller485::setRGB(uint8_t id, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, uint8_t rgbBrightness,
-                             uint8_t rgbMode)
+                             roller_rgb_t rgbMode)
 {
     acquireMutex();
     memset(motorData, 0, sizeof(motorData));
@@ -267,7 +253,7 @@ int8_t UnitRoller485::setRGB(uint8_t id, uint8_t rgbR, uint8_t rgbG, uint8_t rgb
     return state;
 }
 
-int8_t UnitRoller485::setBaudRate(uint8_t id, uint8_t baudRate)
+int8_t UnitRoller485::setBaudRate(uint8_t id, roller_bps_t baudRate)
 {
     acquireMutex();
     memset(motorData, 0, sizeof(motorData));
@@ -763,7 +749,7 @@ int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t dataLen, uint
     // Send data
     if (!sendData(reinterpret_cast<const char *>(readI2cNum1), sizeof(readI2cNum1))) {
         releaseMutex();
-        return ROLLER485_SERIAL_SEND_FAILURE;  // Failed to send data
+        return ROLLER_SERIAL_SEND_FAILURE;  // Failed to send data
     }
     size_t bytesRead = readData();
     if (bytesRead <= 0) {
@@ -772,7 +758,7 @@ int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t dataLen, uint
 #else
 #endif
         releaseMutex();
-        return ROLLER485_SERIAL_TIMEOUT;
+        return ROLLER_SERIAL_TIMEOUT;
     }
     int8_t state = verifyResponse(buffer, bytesRead, readI2cNum1[0] + 0x10, true);
     if (state != 1) {
@@ -802,7 +788,7 @@ int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t addressLen, u
     // Send data
     if (!sendData(reinterpret_cast<const char *>(readI2cNum2), sizeof(readI2cNum2))) {
         releaseMutex();
-        return ROLLER485_SERIAL_SEND_FAILURE;  // Failed to send data
+        return ROLLER_SERIAL_SEND_FAILURE;  // Failed to send data
     }
     size_t bytesRead = readData();
     if (bytesRead <= 0) {
@@ -811,7 +797,7 @@ int8_t UnitRoller485::readI2c(uint8_t id, uint8_t address, uint8_t addressLen, u
 #else
 #endif
         releaseMutex();
-        return ROLLER485_SERIAL_TIMEOUT;
+        return ROLLER_SERIAL_TIMEOUT;
     }
     int8_t state = verifyResponse(buffer, bytesRead, readI2cNum2[0] + 0x10, true);
     if (state != 1) {
@@ -832,7 +818,7 @@ int8_t UnitRoller485::readOutput(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[4]                       = I2C_OUTPUT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -853,7 +839,7 @@ int8_t UnitRoller485::readMode(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[4]                       = I2C_OUTPUT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -874,7 +860,7 @@ int8_t UnitRoller485::readStatus(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[4]                       = I2C_OUTPUT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -895,7 +881,7 @@ int8_t UnitRoller485::readError(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[4]                       = I2C_OUTPUT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -916,7 +902,7 @@ int8_t UnitRoller485::readButton(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[4]                       = I2C_OUTPUT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -937,7 +923,7 @@ int8_t UnitRoller485::readRangeProtection(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[4]                       = I2C_OUTPUT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -958,7 +944,7 @@ int8_t UnitRoller485::readStallProtection(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    readI2cNum2[4]                       = I2C_OUTPUT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -979,7 +965,7 @@ int8_t UnitRoller485::readMotorId(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_DISPOSTION_REG;
+    readI2cNum2[4]                       = I2C_ID_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1000,7 +986,7 @@ int8_t UnitRoller485::readBaudRate(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_DISPOSTION_REG;
+    readI2cNum2[4]                       = I2C_ID_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1021,7 +1007,7 @@ int8_t UnitRoller485::readRgbBrightness(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_DISPOSTION_REG;
+    readI2cNum2[4]                       = I2C_ID_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1042,7 +1028,7 @@ int32_t UnitRoller485::readSpeed(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_SPEEDMODE_REG;
+    readI2cNum2[4]                       = I2C_SPEED_REG ;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1063,7 +1049,7 @@ int32_t UnitRoller485::readSpeedCurrent(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_SPEEDMODECURRENT_REG;
+    readI2cNum2[4]                       = I2C_SPEED_MAX_CURRENT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1084,7 +1070,7 @@ int32_t UnitRoller485::readSpeedReadback(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_SPEEDMODE_READBACK_REG;
+    readI2cNum2[4]                       = I2C_SPEED_READBACK_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1105,7 +1091,7 @@ int8_t UnitRoller485::readSpeedPID(uint8_t id, uint8_t address, double *speedPID
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_SPEEDMODEPID_REG;
+    readI2cNum2[4]                       = I2C_SPEED_PID_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1127,7 +1113,7 @@ int32_t UnitRoller485::readPosition(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_POSITIONMODE_REG;
+    readI2cNum2[4]                       = I2C_POS_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1148,7 +1134,7 @@ int32_t UnitRoller485::readPositionCurrent(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_POSTIONMODECURRENT_REG;
+    readI2cNum2[4]                       = I2C_POS_MAX_CURRENT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1169,7 +1155,7 @@ int32_t UnitRoller485::readPositionReadback(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_POSITIONMODE_READBACK_REG;
+    readI2cNum2[4]                       = I2C_POS_READBACK_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1190,7 +1176,7 @@ int8_t UnitRoller485::readPositionPID(uint8_t id, uint8_t address, double *posit
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_POSITIONMODEPID_REG;
+    readI2cNum2[4]                       = I2C_POS_PID_REG ;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1212,7 +1198,7 @@ int32_t UnitRoller485::readCurrent(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_CURRENTMODE_REG;
+    readI2cNum2[4]                       = I2C_CURRENT_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1233,7 +1219,7 @@ int32_t UnitRoller485::readCurrentReadback(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_CURRENTMODE_READBACK_REG;
+    readI2cNum2[4]                       = I2C_CURRENT_READBACK_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1254,7 +1240,7 @@ int8_t UnitRoller485::readRGB(uint8_t id, uint8_t address, uint8_t *rgbValues)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_RGB_VIN_TEMP_ENCODER_REG;
+    readI2cNum2[4]                       = I2C_RGB_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1278,7 +1264,7 @@ int32_t UnitRoller485::readVin(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_RGB_VIN_TEMP_ENCODER_REG;
+    readI2cNum2[4]                       = I2C_RGB_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1299,7 +1285,7 @@ int32_t UnitRoller485::readTemp(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_RGB_VIN_TEMP_ENCODER_REG;
+    readI2cNum2[4]                       = I2C_RGB_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1320,7 +1306,7 @@ int32_t UnitRoller485::readEncoder(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_RGB_VIN_TEMP_ENCODER_REG;
+    readI2cNum2[4]                       = I2C_RGB_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1341,7 +1327,7 @@ int8_t UnitRoller485::readVersion(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_VERSION_REG;
+    readI2cNum2[4]                       = I2C_FIRMWARE_VERSION_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1362,7 +1348,7 @@ int8_t UnitRoller485::readI2cAddress(uint8_t id, uint8_t address)
     readI2cNum2[0]                       = ROLLER485_READ_I2C_DATA1_CMD;
     readI2cNum2[1]                       = id;
     readI2cNum2[2]                       = address;
-    readI2cNum2[4]                       = ROLLER485_I2C_READ_I2CADDRESS;
+    readI2cNum2[4]                       = I2C_ADDRESS_REG;
     readI2cNum2[6]                       = ROLLER485_I2C_DATA_LEN;
     readI2cNum2[sizeof(readI2cNum2) - 1] = crc8(readI2cNum2, sizeof(readI2cNum2) - 1);
     int8_t state                         = verifyData(readI2cNum2, sizeof(readI2cNum2), true);
@@ -1415,7 +1401,7 @@ int8_t UnitRoller485::writeI2c(uint8_t id, uint8_t address, uint8_t addressLen, 
     return state;
 }
 
-int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool rangeProtection,
+int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, roller_mode_t mode, bool rangeProtection,
                                        bool removeProtection, bool buttonEn, bool stallProtection)
 {
     acquireMutex();
@@ -1424,7 +1410,7 @@ int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_MOTORCONFIG_REG;
+    writeI2cNum[8]                       = I2C_OUTPUT_REG;
     writeI2cNum[9]                       = motorEn;
     writeI2cNum[10]                      = mode;
     writeI2cNum[11]                      = rangeProtection;
@@ -1437,7 +1423,7 @@ int8_t UnitRoller485::writeMotorConfig(uint8_t id, uint8_t address, bool motorEn
     return state;
 }
 
-int8_t UnitRoller485::writeDisposition(uint8_t id, uint8_t address, uint8_t motorId, uint8_t baudRate,
+int8_t UnitRoller485::writeDisposition(uint8_t id, uint8_t address, uint8_t motorId,roller_bps_t baudRate,
                                        uint8_t rgbBrightness)
 {
     acquireMutex();
@@ -1446,7 +1432,7 @@ int8_t UnitRoller485::writeDisposition(uint8_t id, uint8_t address, uint8_t moto
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_DISPOSTION_REG;
+    writeI2cNum[8]                       = I2C_ID_REG;
     writeI2cNum[9]                       = motorId;
     writeI2cNum[10]                      = baudRate;
     writeI2cNum[11]                      = rgbBrightness;
@@ -1468,7 +1454,7 @@ int8_t UnitRoller485::writeSpeedMode(uint8_t id, uint8_t address, int32_t speed)
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_SPEEDMODE_REG;
+    writeI2cNum[8]                       = I2C_SPEED_REG;
     writeI2cNum[9]                       = speedBytes & 0xFF;
     writeI2cNum[10]                      = (speedBytes >> 8) & 0xFF;
     writeI2cNum[11]                      = (speedBytes >> 16) & 0xFF;
@@ -1491,7 +1477,7 @@ int8_t UnitRoller485::writeSpeedModeCurrent(uint8_t id, uint8_t address, int32_t
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_SPEEDMODECURRENT_REG;
+    writeI2cNum[8]                       = I2C_SPEED_MAX_CURRENT_REG;
     writeI2cNum[9]                       = currentBytes & 0xFF;
     writeI2cNum[10]                      = (currentBytes >> 8) & 0xFF;
     writeI2cNum[11]                      = (currentBytes >> 16) & 0xFF;
@@ -1510,7 +1496,7 @@ int8_t UnitRoller485::writeSpeedModePID(uint8_t id, uint8_t address, uint32_t sp
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_SPEEDMODEPID_REG;
+    writeI2cNum[8]                       = I2C_SPEED_PID_REG;
     writeI2cNum[9]                       = speedP & 0xFF;
     writeI2cNum[10]                      = (speedP >> 8) & 0xFF;
     writeI2cNum[11]                      = (speedP >> 16) & 0xFF;
@@ -1541,7 +1527,7 @@ int8_t UnitRoller485::writePositionMode(uint8_t id, uint8_t address, int32_t pos
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_POSITIONMODE_REG;
+    writeI2cNum[8]                       = I2C_POS_REG;
     writeI2cNum[9]                       = positionBytes & 0xFF;
     writeI2cNum[10]                      = (positionBytes >> 8) & 0xFF;
     writeI2cNum[11]                      = (positionBytes >> 16) & 0xFF;
@@ -1564,7 +1550,7 @@ int8_t UnitRoller485::writePositionModeCurrent(uint8_t id, uint8_t address, int3
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_POSTIONMODECURRENT_REG;
+    writeI2cNum[8]                       = I2C_POS_MAX_CURRENT_REG;
     writeI2cNum[9]                       = currentBytes & 0xFF;
     writeI2cNum[10]                      = (currentBytes >> 8) & 0xFF;
     writeI2cNum[11]                      = (currentBytes >> 16) & 0xFF;
@@ -1584,7 +1570,7 @@ int8_t UnitRoller485::writePositionModePID(uint8_t id, uint8_t address, uint32_t
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_POSITIONMODEPID_REG;
+    writeI2cNum[8]                       = I2C_POS_PID_REG;
     writeI2cNum[9]                       = positionP & 0xFF;
     writeI2cNum[10]                      = (positionP >> 8) & 0xFF;
     writeI2cNum[11]                      = (positionP >> 16) & 0xFF;
@@ -1615,7 +1601,7 @@ int8_t UnitRoller485::writeCurrentMode(uint8_t id, uint8_t address, int32_t curr
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_CURRENTMODE_REG;
+    writeI2cNum[8]                       = I2C_CURRENT_REG;
     writeI2cNum[9]                       = currentBytes & 0xFF;
     writeI2cNum[10]                      = (currentBytes >> 8) & 0xFF;
     writeI2cNum[11]                      = (currentBytes >> 16) & 0xFF;
@@ -1627,18 +1613,18 @@ int8_t UnitRoller485::writeCurrentMode(uint8_t id, uint8_t address, int32_t curr
 }
 
 int8_t UnitRoller485::writeSetRGB(uint8_t id, uint8_t address, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB,
-                                  uint8_t rgbMode)
+                                  roller_rgb_t rgbMode)
 {
     memset(writeI2cNum, 0, sizeof(writeI2cNum));
     writeI2cNum[0]                       = ROLLER485_WRITE_I2C_DATA2_CMD;
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_RGB_VIN_TEMP_ENCODER_REG;
+    writeI2cNum[8]                       = I2C_RGB_REG;
     writeI2cNum[9]                       = rgbB;
     writeI2cNum[10]                      = rgbG;
     writeI2cNum[11]                      = rgbR;
-    writeI2cNum[11]                      = rgbMode;
+    writeI2cNum[12]                      = rgbMode;
     writeI2cNum[sizeof(writeI2cNum) - 1] = crc8(writeI2cNum, sizeof(writeI2cNum) - 1);
     int8_t state                         = verifyData(writeI2cNum, sizeof(writeI2cNum), true);
     releaseMutex();
@@ -1653,7 +1639,7 @@ int8_t UnitRoller485::writeEncoderMode(uint8_t id, uint8_t address, int32_t enco
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_RGB_VIN_TEMP_ENCODER_REG;
+    writeI2cNum[8]                       = I2C_DIAL_COUNTER_REG;
     writeI2cNum[9]                       = encoder & 0xFF;
     writeI2cNum[10]                      = (encoder >> 8) & 0xFF;
     writeI2cNum[11]                      = (encoder >> 16) & 0xFF;
@@ -1672,7 +1658,7 @@ int8_t UnitRoller485::writeI2cId(uint8_t id, uint8_t address, bool saveFlashEn, 
     writeI2cNum[1]                       = id;
     writeI2cNum[2]                       = address;
     writeI2cNum[3]                       = ROLLER485_I2C_DATA_LEN;
-    writeI2cNum[8]                       = ROLLER485_I2C_ID_FLASH_REG;
+    writeI2cNum[8]                       = I2C_SAVE_FLASH_REG;
     writeI2cNum[9]                       = saveFlashEn;
     writeI2cNum[10]                      = newAddress;
     writeI2cNum[sizeof(writeI2cNum) - 1] = crc8(writeI2cNum, sizeof(writeI2cNum) - 1);

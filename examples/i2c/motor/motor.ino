@@ -12,17 +12,17 @@ void setup()
 void loop()
 {
     // current mode
-    RollerI2C.setMode(3);
+    RollerI2C.setMode(ROLLER_MODE_ENCODER);
     RollerI2C.setCurrent(120000);
     RollerI2C.setOutput(1);
     printf("current: %d\n", RollerI2C.getCurrent());
     delay(100);
-    printf("actualCurrent: %d\n", RollerI2C.getCurrentReadback());
+    printf("actualCurrent: %d\n", RollerI2C.getCurrentReadback()/100.0f);
     delay(5000);
 
     // position mode
     RollerI2C.setOutput(0);
-    RollerI2C.setMode(2);
+    RollerI2C.setMode(ROLLER_MODE_SPEED);
     RollerI2C.setPos(2000000);
     RollerI2C.setPosMaxCurrent(100000);
     RollerI2C.setOutput(1);
@@ -31,14 +31,14 @@ void loop()
     delay(100);
     printf("pos: %d\n", RollerI2C.getPos());
     delay(100);
-    printf("posMaxCurrent: %d\n", RollerI2C.getPosMaxCurrent());
+    printf("posMaxCurrent: %d\n", RollerI2C.getPosMaxCurrent()/100.0f);
     delay(100);
-    printf("actualPos: %d\n", RollerI2C.getPosReadback());
+    printf("actualPos: %d\n", RollerI2C.getPosReadback()/100.f);
     delay(5000);
 
     // speed mode
     RollerI2C.setOutput(0);
-    RollerI2C.setMode(1);
+    RollerI2C.setMode(ROLLER_MODE_SPEED);
     RollerI2C.setSpeed(240000);
     RollerI2C.setSpeedMaxCurrent(100000);
     RollerI2C.setOutput(1);
@@ -47,14 +47,14 @@ void loop()
     delay(100);
     printf("speed: %d\n", RollerI2C.getSpeed());
     delay(100);
-    printf("speedMaxCurrent: %d\n", RollerI2C.getSpeedMaxCurrent());
+    printf("speedMaxCurrent: %d\n", RollerI2C.getSpeedMaxCurrent()/100.0f);
     delay(100);
-    printf("actualSpeed: %d\n", RollerI2C.getSpeedReadback());
+    printf("actualSpeed: %d\n", RollerI2C.getSpeedReadback()/100.0f);
     delay(5000);
 
     // encoder mode
     RollerI2C.setOutput(0);
-    RollerI2C.setMode(4);
+    RollerI2C.setMode(ROLLER_MODE_ENCODER);
     RollerI2C.setDialCounter(240000);
     RollerI2C.setOutput(1);
     printf("DialCounter:%d\n", RollerI2C.getDialCounter());
@@ -67,7 +67,7 @@ void loop()
     delay(1000);
     RollerI2C.setRGBBrightness(100);
     delay(100);
-    RollerI2C.setRGBMode(1);
+    RollerI2C.setRGBMode(ROLLER_RGB_MODE_USER_DEFINED );
     delay(1000);
     RollerI2C.setRGB(TFT_WHITE);
     delay(1000);
@@ -77,7 +77,7 @@ void loop()
     delay(2000);
     RollerI2C.setRGB(TFT_RED);
     delay(2000);
-    RollerI2C.setRGBMode(0);
+    RollerI2C.setRGBMode(ROLLER_RGB_MODE_DEFAULT );
     delay(100);
     RollerI2C.setKeySwitchMode(1);
     delay(100);

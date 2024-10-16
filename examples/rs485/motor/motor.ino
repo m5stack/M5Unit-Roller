@@ -11,18 +11,18 @@ void setup()
 {
     M5.begin();
     // Call the begin function and pass arguments
-    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 22, 21, false, 10000UL, 112U);
+    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 16, 17,-1, false, 10000UL, 112U);
     // Set the motor mode to speed
-    Roller485.setMode(motor485Id, 0x01);
+    Roller485.setMode(motor485Id, ROLLER_MODE_SPEED);
     // Set speed Speed and current
     Roller485.setSpeedMode(motor485Id, 2400, 1200);
     // Set the motor to enable
-    Roller485.setOutput(motor485Id, 0x01);
+    Roller485.setOutput(motor485Id, true);
 }
 
 void loop()
 {
-    int errorCode = Roller485.setMode(motor485Id, 0x01);
+    int errorCode = Roller485.setMode(motor485Id,ROLLER_MODE_SPEED);
     if (errorCode == 1) {
         // Successful operation
         Serial.println("setMode() successful.");
@@ -41,9 +41,6 @@ void loop()
     delay(1000);
     int32_t encoder = Roller485.getEncoder(motor485Id);
     Serial.printf("encoder: %d\n", encoder);
-    delay(1000);
-    int rgbMode = Roller485.getRGBMode(motor485Id);
-    Serial.printf("RGBMode: %d\n", rgbMode);
     delay(1000);
     int rgbBrightness = Roller485.getRGBBrightness(motor485Id);
     Serial.printf("rgbBrightness: %d\n", rgbBrightness);

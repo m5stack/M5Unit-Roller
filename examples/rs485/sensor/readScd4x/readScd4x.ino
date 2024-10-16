@@ -13,7 +13,7 @@ void setup()
 {
     M5.begin();
     // Call the begin function and pass arguments
-    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 22, 21, false, 10000UL, 112U);
+    Roller485.begin(&mySerial, 115200, SERIAL_8N1, 16, 17, -1,false, 10000UL, 112U);
     // Set the sensor to return data every 5 seconds
     uint8_t errorSetup = Roller485.writeI2c(motor485Id, scd4xI2cAddress, scd4xSetup, sizeof(scd4xSetup), 0);
     if (errorSetup != 1) {

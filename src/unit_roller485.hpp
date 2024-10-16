@@ -8,47 +8,7 @@
 #define __UNIT_ROLLER485_H
 
 #include "Arduino.h"
-
-// #define UNIT_ROLLER_DEBUG Serial  // This macro definition can be annotated without sending and receiving data prints
-//       Define the serial port you want to use, e.g., Serial1 or Serial2
-#if defined UNIT_ROLLER_DEBUG
-#define serialPrint(...)   UNIT_ROLLER_DEBUG.print(__VA_ARGS__)
-#define serialPrintln(...) UNIT_ROLLER_DEBUG.println(__VA_ARGS__)
-#define serialPrintf(...)  UNIT_ROLLER_DEBUG.printf(__VA_ARGS__)
-#define serialFlush()      UNIT_ROLLER_DEBUG.flush()
-#else
-
-#endif
-// Macro definitions for error codes
-/**
- * @brief Indicates a successful write operation.
- */
-#define ROLLER485_WRITE_SUCCESS (1)
-
-/**
- * @brief Indicates a failure during write or read operations.
- */
-#define ROLLER485_WRITE_FAILED (0)
-
-/**
- * @brief Indicates a failure in CRC check.
- */
-#define ROLLER485_CRC_CHECK_FAIL (-1)
-
-/**
- * @brief Indicates a timeout in serial communication.
- */
-#define ROLLER485_SERIAL_TIMEOUT (-2)
-
-/**
- * @brief Indicates an unexpected response received from the device.
- */
-#define ROLLER485_UNEXPECTED_RESPONSE (-3)
-
-/**
- * @brief Indicates a failure in sending serial data.
- */
-#define ROLLER485_SERIAL_SEND_FAILURE (-4)
+#include "unit_roller_common.hpp"
 
 /**
  * @brief Command to set output parameters of the Unit Roller.
@@ -172,177 +132,36 @@
  */
 #define ROLLER485_I2C_DATA_LEN (0x10)
 
-/**
- * @brief  motor configuration Settings or read register address..
- */
-#define ROLLER485_I2C_MOTORCONFIG_REG (0x00)
-
-/**
- * @brief Motor id, 485 bps, RGB brightness Settings or read register address.
- */
-#define ROLLER485_I2C_DISPOSTION_REG (0x10)
-
-/**
- * @brief position mode sets the maximum current or reads the register address..
- */
-#define ROLLER485_I2C_POSTIONMODECURRENT_REG (0x20)
-
-/**
- * @brief Temperature, voltage read, RGB, encoder Settings or read register addresses.
- */
-#define ROLLER485_I2C_RGB_VIN_TEMP_ENCODER_REG (0X30)
-
-/**
- * @brief Speed mode sets the speed  or reads the register address.
- */
-#define ROLLER485_I2C_SPEEDMODE_REG (0x40)
-
-/**
- * @brief Speed mode sets the maximum current or reads the register address.
- */
-#define ROLLER485_I2C_SPEEDMODECURRENT_REG (0x50)
-
-/**
- * @brief This register reads back the current speed of the speed mode.
- */
-#define ROLLER485_I2C_SPEEDMODE_READBACK_REG (0x60)
-
-/**
- * @brief Configure or read PID to set the register address in speed mode.
- */
-#define ROLLER485_I2C_SPEEDMODEPID_REG (0x70)
-
-/**
- * @brief Position mode sets the position  or reads the register address.
- */
-#define ROLLER485_I2C_POSITIONMODE_REG (0x80)
-
-/**
- * @brief This register reads back the current postion of the position mode.
- */
-#define ROLLER485_I2C_POSITIONMODE_READBACK_REG (0x90)
-
-/**
- * @brief Configure or read PID to set the register address in position mode.
- */
-#define ROLLER485_I2C_POSITIONMODEPID_REG (0xA0)
-
-/**
- * @brief Current mode sets the current  or reads the register address.
- */
-#define ROLLER485_I2C_CURRENTMODE_REG (0xB0)
-
-/**
- * @brief This register reads back the current of the current mode.
- */
-#define ROLLER485_I2C_CURRENTMODE_READBACK_REG (0xC0)
-
-/**
- * @brief Register for storing the device ID in flash memory.
- */
-#define ROLLER485_I2C_ID_FLASH_REG (0xF0)
-
-/**
- * @brief Register that contains the firmware version information.
- */
-#define ROLLER485_I2C_VERSION_REG (0xFE)
-
-/**
- * @brief Read or set the register address of the device I2C address.
- */
-#define ROLLER485_I2C_READ_I2CADDRESS (0xFF)
-
 class UnitRoller485 {
-private:
-    bool mutexLocked;
-    static const size_t BUFFER_SIZE = 128;
-    char buffer[BUFFER_SIZE];
-    uint8_t motorData[15] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-    uint8_t Readback[4]   = {0x00, 0x00, 0x00, 0x00};
-    // 485->i2c
-    uint8_t readI2cNum1[5]  = {0x00, 0x00, 0x00, 0x00, 0x00};
-    uint8_t readI2cNum2[8]  = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-    uint8_t writeI2cNum[25] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-    /**
-    * @brief verifies UART response data
-    *
-    Verify received UART response data and check that its CRC checksum matches expectations.
-    * If needed, the first byte of the response and (if validation is enabled) protocol-specific bytes are also checked.
-    *
-    * @param responseBuffer Buffer of response data
-    * @param responseSize Size of response data (in bytes)
-    * @param expectedResponse the first byte of the expected response
-    * @param verifyResponse Whether additional response validation is enabled (e.g. I2C write/read operations)
-    *
-    * @return returns WRITE_stateif the validation succeeds, otherwise returns the corresponding error code
-    */
-    int8_t verifyResponse(const char *responseBuffer, size_t responseSize, uint8_t expectedResponse,
-                          bool verifyResponse);
-
-    /**
-     * @brief verifies that data is sent and received concurrently
-     *
-     * This function is responsible for sending the given data and waiting for the received response. If validation is
-     * enabled, the response data is also validated.
-     *
-     * @param data Pointer to the data to be sent
-     * @param length Length of the data
-     * @param verify Whether response verification is enabled
-     *
-     * @return The result or error code of the response validation
-     * -SERIAL_SEND_FAILURE: data fails to be sent
-     * -SERIAL_TIMEOUT: A timeout occurs while waiting for a response
-     * - Other values: The result of verifying the response (if the verification was stateful)
-     */
-    int8_t verifyData(uint8_t *data, size_t length, bool verify);
-
-    /**
-     * @brief processes values
-     *
-     * Combines four bytes into a 32-bit integer and returns that value.
-     * This function is usually used to process raw data from encoders or other devices.
-     *
-     * @param byte0 Minimum valid byte
-     * @param byte1 Second byte
-     * @param byte2 Third byte
-     * @param byte3 Highest valid byte
-     *
-     * @return The combined 32-bit integer
-     */
-    int32_t handleValue(uint8_t byte0, uint8_t byte1, uint8_t byte2, uint8_t byte3);
-
 public:
     HardwareSerial *serialPort;
 
     /**
-     * @brief Initializes serial communication.
+     * @brief Initializes the hardware serial communication interface.
      *
-     * This function initializes the hardware serial communication interface in the UnitRoller485 class.
+     * This function sets up the serial communication for the UnitRoller485 class,
+     * configuring parameters such as baud rate, pin assignments, signal inversion,
+     * and timeouts. It is essential to call this function before attempting to =
+     * communicate using the serial interface.
      *
-     * @param serial A pointer to a HardwareSerial object for serial communication.
-     * @param baud Baud rate: Specifies the rate of serial communication.
-     * @param config Configuration parameter.
-     * @param rxPin Receiving pin number.
-     * @param txPin Sending pin number.
-     * @param invert Whether to reverse the signal (for example, for RS-485 communication).
-     * @param timeout_ms Read timeout (in milliseconds).
-     * @param rxfifo_full_thrhd Received FIFO buffer full threshold.
+     * @param serial Pointer to a HardwareSerial object used for the serial communication.
+     * @param baud The baud rate for serial communication (e.g., 9600, 115200).
+     * @param config Configuration parameter for serial settings (default: SERIAL_8N1).
+     *               This specifies data bits, parity, and stop bits.
+     * @param rxPin The GPIO pin number designated for receiving data (default: -1 for auto).
+     * @param txPin The GPIO pin number designated for transmitting data (default: -1 for auto).
+     * @param dirPin The GPIO pin number used for direction control in RS-485 mode
+     *               (default: -1 indicates no direction control).
+     * @param invert A boolean value indicating whether to invert the signal (true for RS-485
+     *               communication, which may require signal inversion).
+     * @param timeout_ms The read timeout duration in milliseconds; specifies how long
+     *                   to wait for incoming data before timing out (default: 10000 ms).
+     * @param rxfifo_full_thrhd The threshold for the received FIFO buffer full condition;
+     *                          when the buffer reaches this size, an overflow warning may be triggered (default: 112).
      */
     void begin(HardwareSerial *serial, unsigned long baud, uint32_t config = SERIAL_8N1, int8_t rxPin = -1,
-               int8_t txPin = -1, bool invert = false, unsigned long timeout_ms = 10000UL,
+               int8_t txPin = -1, int8_t dirPin = -1, bool invert = false, unsigned long timeout_ms = 10000UL,
                uint8_t rxfifo_full_thrhd = 112UL);
-
-    /**
-     * @brief Wait for the mutex to be unlocked
-     */
-    void acquireMutex();
-
-    /**
-     * @brief Release the mutex
-     */
-    void releaseMutex();
 
     /**
      * @brief sends data
@@ -394,7 +213,7 @@ public:
      * Mode 4. Encoder Mode
      * @return The result or error code of the response validation
      */
-    int8_t setMode(uint8_t id, uint8_t mode);
+    int8_t setMode(uint8_t id, roller_mode_t mode);
 
     /**
      * @brief Set Remove protection
@@ -440,7 +259,7 @@ public:
      * value：0
      * @return The result or error code of the response validation
      */
-    int8_t setRGB(uint8_t id, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, uint8_t rgbBrightness, uint8_t rgbMode);
+    int8_t setRGB(uint8_t id, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, uint8_t rgbBrightness, roller_rgb_t rgbMode);
 
     /**
      * @brief Set baud rate (can be save to flash)
@@ -449,7 +268,7 @@ public:
      * value：0
      * @return The result or error code of the response validation
      */
-    int8_t setBaudRate(uint8_t id, uint8_t baudRate);
+    int8_t setBaudRate(uint8_t id, roller_bps_t baudRate);
 
     /**
      * @brief Set motor id (can be save to flash)
@@ -934,7 +753,7 @@ public:
      * @param stallProtection   Motor Stall Protection:: 0,Disable; 1, Enable
      * @return The result or error code of the response validation
      */
-    int8_t writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, uint8_t mode, bool rangeProtection,
+    int8_t writeMotorConfig(uint8_t id, uint8_t address, bool motorEn, roller_mode_t mode, bool rangeProtection,
                             bool removeProtection, bool buttonEn, bool stallProtection);
 
     /**
@@ -942,12 +761,11 @@ public:
      * @param id  Motor equipment id   Value range:0~255
      * @param address Device address   Value range:0~127
      * @param motorId     Value range:0~255
-     * @param baudRate    BPS: 0,115200bps; 1, 19200bps; 2, 9600bps;    Default
-     value：0
-    * @param rgbBrightness   Value range:0~100
-    * @return The result or error code of the response validation
-    */
-    int8_t writeDisposition(uint8_t id, uint8_t address, uint8_t motorId, uint8_t baudRate, uint8_t rgbBrightness);
+     * @param baudRate    BPS: 0,115200bps; 1, 19200bps; 2, 9600bps;Default value：0
+     * @param rgbBrightness   Value range:0~100
+     * @return The result or error code of the response validation
+     */
+    int8_t writeDisposition(uint8_t id, uint8_t address, uint8_t motorId, roller_bps_t baudRate, uint8_t rgbBrightness);
 
     /**
      * @brief  write_speedMode
@@ -1034,7 +852,7 @@ public:
      * value：0
      * @return The result or error code of the response validation
      */
-    int8_t writeSetRGB(uint8_t id, uint8_t address, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, uint8_t rgbMode);
+    int8_t writeSetRGB(uint8_t id, uint8_t address, uint8_t rgbR, uint8_t rgbG, uint8_t rgbB, roller_rgb_t rgbMode);
 
     /**
      * @brief  write encoder
@@ -1048,11 +866,58 @@ public:
     /**
      * @brief  write  i2c id
      * @param id  Motor equipment id   Value range:0~255
-     * @param address Device address   Value range:0~127
+     * @param address Device address   Value range:1~127
      * @param saveFlashEn Save to flash: Send 1 save parameters to flash
-     * @param newAddress  new address  Value range:0~127
+     * @param newAddress  new address  Value range:1~127
      * @return The result or error code of the response validation
      */
     int8_t writeI2cId(uint8_t id, uint8_t address, bool saveFlashEn, uint8_t newAddress);
+
+private:
+    bool mutexLocked;
+    int8_t dirPin;
+    static const size_t BUFFER_SIZE = 128;
+    char buffer[BUFFER_SIZE];
+    uint8_t motorData[15] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    uint8_t Readback[4]   = {0x00, 0x00, 0x00, 0x00};
+    // 485->i2c
+    uint8_t readI2cNum1[5]  = {0x00, 0x00, 0x00, 0x00, 0x00};
+    uint8_t readI2cNum2[8]  = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    uint8_t writeI2cNum[25] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+    /**
+    * @brief verifies UART response data
+    *
+    Verify received UART response data and check that its CRC checksum matches expectations.
+    * If needed, the first byte of the response and (if validation is enabled) protocol-specific bytes are also checked.
+    *
+    * @param responseBuffer Buffer of response data
+    * @param responseSize Size of response data (in bytes)
+    * @param expectedResponse the first byte of the expected response
+    * @param verifyResponse Whether additional response validation is enabled (e.g. I2C write/read operations)
+    *
+    * @return returns WRITE_stateif the validation succeeds, otherwise returns the corresponding error code
+    */
+    int8_t verifyResponse(const char *responseBuffer, size_t responseSize, uint8_t expectedResponse,
+                          bool verifyResponse);
+
+    /**
+     * @brief verifies that data is sent and received concurrently
+     *
+     * This function is responsible for sending the given data and waiting for the received response. If validation is
+     * enabled, the response data is also validated.
+     *
+     * @param data Pointer to the data to be sent
+     * @param length Length of the data
+     * @param verify Whether response verification is enabled
+     *
+     * @return The result or error code of the response validation
+     * -SERIAL_SEND_FAILURE: data fails to be sent
+     * -SERIAL_TIMEOUT: A timeout occurs while waiting for a response
+     * - Other values: The result of verifying the response (if the verification was stateful)
+     */
+    int8_t verifyData(uint8_t *data, size_t length, bool verify);
 };
+
 #endif
