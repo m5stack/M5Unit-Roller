@@ -1360,17 +1360,17 @@ bool UnitRollerCAN::sendData(uint8_t can_id, uint8_t cmd_id, uint16_t option, co
 {
     ping_message.flags |= (1 << 0);
     ping_message.identifier = 0x00000000 | (cmd_id << 24) | (option << 16) | can_id;
+    for (int i = 0; i < 8; i++) {
+        ping_message.data[i] = data[i];
+    }
 #if defined UNIT_ROLLER_DEBUG
     Serial.printf("send data: 0x%02X ", ping_message.identifier);
     for (int i = 0; i < 8; i++) {
-        printf("0x%02X ", ping_message.data[i]);
+        Serial.printf("0x%02X ", ping_message.data[i]);
     }
     Serial.printf("\n");
 #else
 #endif
-    for (int i = 0; i < 8; i++) {
-        ping_message.data[i] = data[i];
-    }
     esp_err_t transmitResult = twai_transmit(&ping_message, 2000);
 
     if (transmitResult == ESP_OK) {
