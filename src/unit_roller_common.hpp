@@ -259,6 +259,27 @@ typedef enum {
  */
 #define I2C_ADDRESS_REG (0xFF)
 
+/**
+ * @brief Start Angle Calibration Register.
+ *
+ * This is an internal factory register that is used to initiate the calibration process for the magnetic encoder.
+ */
+#define START_ANGLE_CAL_REG (0xF1)
+
+/**
+ * @brief Update Angle Calibration Register.
+ *
+ * This is an internal factory register used to update the calibration value of the magnetic encoder.
+ */
+#define UPDATE_ANGLE_CAL_REG (0xF2)
+
+/**
+ * @brief Get Angle Calibration Status Register.
+ *
+ * This is an internal factory register used to retrieve the calibration status of the magnetic encoder.
+ */
+#define GET_ANGLE_BUSY_REG (0xF3)
+
 extern bool mutexLocked;
 
 void acquireMutex();

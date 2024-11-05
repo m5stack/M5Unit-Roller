@@ -251,6 +251,29 @@ uint8_t UnitRollerI2C::setI2CAddress(uint8_t addr)
     return _addr;
 }
 
+void UnitRollerI2C::startAngleCal(void)
+{
+    uint8_t temp = 1;
+    uint8_t reg  = START_ANGLE_CAL_REG;
+    writeBytes(_addr, reg, (uint8_t *)&temp, 1);
+}
+
+void UnitRollerI2C::updateAngleCal(void)
+{
+    uint8_t temp = 1;
+    uint8_t reg  = UPDATE_ANGLE_CAL_REG;
+    writeBytes(_addr, reg, (uint8_t *)&temp, 1);
+}
+
+uint8_t UnitRollerI2C::getCalBusyStatus(void)
+{
+    uint8_t temp = 0;
+    uint8_t reg  = GET_ANGLE_BUSY_REG;
+    readBytes(_addr, reg, (uint8_t *)&temp, 1);
+
+    return temp;
+}
+
 void UnitRollerI2C::getSpeedPID(uint32_t *p, uint32_t *i, uint32_t *d)
 {
     uint8_t data[12];

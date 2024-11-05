@@ -451,6 +451,44 @@ public:
     uint8_t setI2CAddress(uint8_t addr);
 
     /**
+     * @brief Start the encoder calibration process.
+     *
+     * This is an internal factory command that
+     * is used to initiate the calibration process for the magnetic encoder.
+     *
+     *
+     * @note Ensure that I2C communication has been properly initialized
+     *       before calling this function.
+     */
+    void startAngleCal(void);
+
+    /**
+     * @brief Update the encoder calibration value to the UnitRollerI2C device.
+     *
+     * This is an internal factory command
+     * used to update the calibration value of the magnetic encoder.
+     *
+     *
+     * @note Ensure that I2C communication has been properly initialized
+     *       before calling this function.
+     */
+    void updateAngleCal(void);
+
+    /**
+     * @brief Retrieves the status of calibrating the magnetic encoder.
+     *
+     * This is an internal factory command
+     * used to retrieve the calibration status of the magnetic encoder.
+     *
+     * @return uint8_t 1 Calibrating
+     *                 0 Not calibrated
+     *
+     * @note Ensure that I2C communication has been properly initialized
+     *       before calling this function.
+     */
+    uint8_t getCalBusyStatus(void);
+
+    /**
      * @brief Retrieves the Speed PID parameters from the UnitRollerI2C device.
      *
      * This function reads the proportional (P), integral (I), and derivative (D)
