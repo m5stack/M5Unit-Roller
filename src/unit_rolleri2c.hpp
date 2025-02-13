@@ -1003,7 +1003,7 @@ private:
     TwoWire *_wire;
     uint8_t _scl;
     uint8_t _sda;
-    uint8_t _speed;
+    uint32_t _speed;
 
     /**
      * @brief Writes a sequence of bytes to a specific register on a device.
