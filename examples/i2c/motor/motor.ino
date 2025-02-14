@@ -22,7 +22,7 @@ void loop()
 
     // position mode
     RollerI2C.setOutput(0);
-    RollerI2C.setMode(ROLLER_MODE_SPEED);
+    RollerI2C.setMode(ROLLER_MODE_POSITION);
     RollerI2C.setPos(2000000);
     RollerI2C.setPosMaxCurrent(100000);
     RollerI2C.setOutput(1);
