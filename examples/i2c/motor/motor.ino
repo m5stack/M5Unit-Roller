@@ -12,12 +12,12 @@ void setup()
 void loop()
 {
     // current mode
-    RollerI2C.setMode(ROLLER_MODE_ENCODER);
+    RollerI2C.setMode(ROLLER_MODE_CURRENT);
     RollerI2C.setCurrent(120000);
     RollerI2C.setOutput(1);
     printf("current: %d\n", RollerI2C.getCurrent());
     delay(100);
-    printf("actualCurrent: %d\n", RollerI2C.getCurrentReadback() / 100.0f);
+    printf("actualCurrent: %.2f\n", RollerI2C.getCurrentReadback() / 100.0f);
     delay(5000);
 
     // position mode
