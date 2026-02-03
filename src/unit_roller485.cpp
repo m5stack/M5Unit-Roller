@@ -90,8 +90,12 @@ bool UnitRoller485::sendData(const char *data, size_t length)
     }
     size_t bytesSent = serialPort->write(reinterpret_cast<const uint8_t *>(data), length);
     if (bytesSent != length) {
+        if (dirPin != -1) {
+            digitalWrite(dirPin, LOW);
+        }
         return false;
     }
+    serialPort->flush();
     if (dirPin != -1) {
         digitalWrite(dirPin, LOW);
     }
