@@ -141,6 +141,18 @@ void UnitRollerI2C::setPos(int32_t pos)
     writeBytes(_addr, reg, (uint8_t *)&pos, 4);
 }
 
+void UnitRollerI2C::setPosTurn(int32_t turn)
+{
+    uint8_t reg = I2C_POS_TURN_REG;
+    writeBytes(_addr, reg, (uint8_t *)&turn, sizeof(turn));
+}
+
+void UnitRollerI2C::setPosAngle(uint16_t angle)
+{
+    uint8_t reg = I2C_POS_ANGLE_REG;
+    writeBytes(_addr, reg, (uint8_t *)&angle, sizeof(angle));
+}
+
 void UnitRollerI2C::setPosMaxCurrent(int32_t current)
 {
     uint8_t reg = I2C_POS_MAX_CURRENT_REG;
@@ -334,6 +346,20 @@ int32_t UnitRollerI2C::getPos(void)
     return data;
 }
 
+int32_t UnitRollerI2C::getPosTurn(void)
+{
+    int32_t data = 0;
+    readBytes(_addr, I2C_POS_TURN_REG, (uint8_t *)&data, sizeof(data));
+    return data;
+}
+
+uint16_t UnitRollerI2C::getPosAngle(void)
+{
+    uint16_t data = 0;
+    readBytes(_addr, I2C_POS_ANGLE_REG, (uint8_t *)&data, sizeof(data));
+    return data;
+}
+
 int32_t UnitRollerI2C::getPosMaxCurrent(void)
 {
     int32_t data = 0;
@@ -347,6 +373,20 @@ int32_t UnitRollerI2C::getPosReadback(void)
     int32_t data = 0;
     uint8_t reg  = I2C_POS_READBACK_REG;
     readBytes(_addr, reg, (uint8_t *)&data, 4);
+    return data;
+}
+
+int32_t UnitRollerI2C::getPosReadbackTurn(void)
+{
+    int32_t data = 0;
+    readBytes(_addr, I2C_POS_READBACK_TURN_REG, (uint8_t *)&data, sizeof(data));
+    return data;
+}
+
+uint16_t UnitRollerI2C::getPosReadbackAngle(void)
+{
+    uint16_t data = 0;
+    readBytes(_addr, I2C_POS_READBACK_ANGLE_REG, (uint8_t *)&data, sizeof(data));
     return data;
 }
 
@@ -485,26 +525,28 @@ uint8_t UnitRollerI2C::getRGBMode(void)
 
 uint8_t UnitRollerI2C::getFirmwareVersion(void)
 {
-    _wire->beginTransmission(_addr);
-    _wire->write(I2C_FIRMWARE_VERSION_REG);
-    _wire->endTransmission(false);
+    uint8_t data = 0;
+    readBytes(_addr, I2C_FIRMWARE_VERSION_REG, &data, sizeof(data));
+    return data;
+}
 
-    uint8_t RegValue;
-    _wire->requestFrom(_addr, 1);
-    RegValue = Wire.read();
-    return RegValue;
+void UnitRollerI2C::getUID(uint8_t *uid)
+{
+    if (uid != nullptr) {
+        readBytes(_addr, I2C_UID_REG, uid, 12);
+    }
+}
+
+uint8_t UnitRollerI2C::getDeviceTypeID(void)
+{
+    uint8_t data = 0;
+    readBytes(_addr, I2C_DEVICE_ID_REG, &data, sizeof(data));
+    return data;
 }
 
 uint8_t UnitRollerI2C::getI2CAddress(void)
 {
-    uint8_t data[2] = {0};
-
-    data[0] = I2C_ADDRESS_REG;
-    _wire->beginTransmission(_addr);
-    _wire->write(data[0]);
-    _wire->endTransmission(false);
-    uint8_t RegValue;
-    _wire->requestFrom(_addr, 1);
-    RegValue = Wire.read();
-    return RegValue;
+    uint8_t data = 0;
+    readBytes(_addr, I2C_ADDRESS_REG, &data, sizeof(data));
+    return data;
 }

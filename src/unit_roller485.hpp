@@ -86,6 +86,11 @@
 #define ROLLER485_CURRENT_MODE_CMD (0x24)
 
 /**
+ * @brief Command to set the extended target position and position-mode current limit.
+ */
+#define ROLLER485_EXTENDED_POSITION_CMD (0x25)
+
+/**
  * @brief Command to read back parameter group 0.
  */
 #define ROLLER485_READ_BACK0_CMD (0x40)
@@ -104,6 +109,26 @@
  * @brief Command to read back parameter group 3.
  */
 #define ROLLER485_READ_BACK3_CMD (0x43)
+
+/**
+ * @brief Command to read the extended actual and target positions.
+ */
+#define ROLLER485_READ_EXTENDED_POSITION_CMD (0x44)
+
+/**
+ * @brief Command to read the UID, product device type ID, and firmware version.
+ */
+#define ROLLER485_READ_DEVICE_INFO_CMD (0x45)
+
+/**
+ * @brief Command to read current targets and current limits.
+ */
+#define ROLLER485_READ_CURRENT_PARAMETERS_CMD (0x46)
+
+/**
+ * @brief Command to read target values and device configuration.
+ */
+#define ROLLER485_READ_TARGET_CONFIG_CMD (0x47)
 
 /**
  * @brief Command to read I2C data from address 1.
@@ -318,6 +343,21 @@ public:
     int32_t setPositionMode(uint8_t id, int32_t position, int32_t current);
 
     /**
+     * @brief Sets the extended target position and position-mode current limit.
+     *
+     * @param id Motor
+     * device ID. Valid range: 0-255.
+     * @param turn Signed target number of complete turns.
+     * @param angle
+     * Target in-turn angle in 0.01 degree units. Valid range: 0-35999.
+     * @param maxCurrent Position-mode current
+     * limit in mA. Valid range: 0-1200.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t
+     * error code.
+     */
+    int8_t setPosTurnAngle(uint8_t id, int32_t turn, uint16_t angle, int32_t maxCurrent);
+
+    /**
      * @brief  Set the position mode PID configuration
      * @param id  Motor equipment id   Value range:0~255
      * @param positionP    For example: mottor P=0.004, positionP setting
@@ -351,6 +391,87 @@ public:
      * @return The result or error code of the response validation
      */
     int32_t getActualPosition(uint8_t id);
+
+    /**
+     * @brief Reads the extended target position.
+     *
+     * @param id Motor device ID. Valid range: 0-255.
+
+     * * @param turn Pointer that receives the signed target number of complete turns.
+     * @param angle Pointer that
+     * receives the target in-turn angle in 0.01 degree units.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise
+     * a roller_errcode_t error code.
+     */
+    int8_t getPosTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle);
+
+    /**
+     * @brief Reads the extended actual position.
+     *
+     * @param id Motor device ID. Valid range: 0-255.
+
+     * * @param turn Pointer that receives the signed actual number of complete turns.
+     * @param angle Pointer that
+     * receives the actual in-turn angle in 0.01 degree units.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise
+     * a roller_errcode_t error code.
+     */
+    int8_t getPosReadbackTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle);
+
+    /**
+     * @brief Reads the STM32 96-bit unique device ID.
+     *
+     * @param id Motor device ID. Valid range:
+     * 0-255.
+     * @param uid Pointer to a caller-provided buffer of at least 12 bytes.
+     * @return
+     * ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getUID(uint8_t id, uint8_t *uid);
+
+    /**
+     * @brief Reads the product device type ID.
+     *
+     * @param id Motor device ID. Valid range: 0-255.
+
+     * * @param deviceId Pointer that receives the one-byte product type identifier.
+     * @return ROLLER_WRITE_SUCCESS
+     * on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getDeviceTypeID(uint8_t id, uint8_t *deviceId);
+
+    /**
+     * @brief Reads the motor firmware version.
+     *
+     * @param id Motor device ID. Valid range: 0-255.
+
+     * * @param version Pointer that receives the one-byte firmware version.
+     * @return ROLLER_WRITE_SUCCESS on
+     * success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getFirmwareVersion(uint8_t id, uint8_t *version);
+
+    /**
+     * @brief Reads the current target and the speed/position current limits.
+     *
+     * @param id Motor
+     * device ID. Valid range: 0-255.
+     * @param parameters Pointer that receives the current parameters in 0.01 mA
+     * units.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getCurrentParameters(uint8_t id, roller485_current_t *parameters);
+
+    /**
+     * @brief Reads the target values and device configuration.
+     *
+     * @param id Motor device ID. Valid
+     * range: 0-255.
+     * @param configuration Pointer that receives the current target and configuration values.
+
+     * * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getTargetConfiguration(uint8_t id, roller485_config_t *configuration);
 
     /**
      * @brief  Get motor current
@@ -918,6 +1039,14 @@ private:
      * - Other values: The result of verifying the response (if the verification was stateful)
      */
     int8_t verifyData(uint8_t *data, size_t length, bool verify);
+
+    int8_t transactV3(const uint8_t *request, size_t requestLength, uint8_t expectedCommand, uint8_t id,
+                      uint8_t *response, size_t responseLength);
+    int8_t queryV3(uint8_t command, uint8_t id, uint8_t *response, size_t responseLength);
+    int8_t readV3Frame(uint8_t *response, size_t responseLength);
+    static int32_t readInt32LE(const uint8_t *data);
+    static uint16_t readUint16LE(const uint8_t *data);
+    static void writeInt32LE(uint8_t *data, int32_t value);
 };
 
 #endif

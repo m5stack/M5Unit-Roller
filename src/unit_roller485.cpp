@@ -104,22 +104,34 @@ bool UnitRoller485::sendData(const char *data, size_t length)
 
 size_t UnitRoller485::readData()
 {
+    constexpr unsigned long firstByteTimeoutMs = 500;
+    constexpr unsigned long interByteTimeoutMs = 20;
+
     memset(buffer, 0, BUFFER_SIZE);
-    size_t bytesRead            = 0;
-    unsigned long startTime     = millis();
-    unsigned long timeoutMillis = 500;
-    // Read data from serial port with timeout
-    while (millis() - startTime < timeoutMillis && bytesRead < BUFFER_SIZE) {
-        if (serialPort->available() > 0) {
-            buffer[bytesRead++] = serialPort->read();
-            startTime           = millis();  // Reset timeout start time on stateful read
+    size_t bytesRead              = 0;
+    const unsigned long startTime = millis();
+    unsigned long lastByteTime    = startTime;
+    bool receivedAnyByte          = false;
+
+    while (bytesRead < BUFFER_SIZE) {
+        while (serialPort->available() > 0 && bytesRead < BUFFER_SIZE) {
+            buffer[bytesRead++] = static_cast<uint8_t>(serialPort->read());
+            lastByteTime        = millis();
+            receivedAnyByte     = true;
         }
-        delay(1);  // Optional small delay for stability
+
+        const unsigned long now = millis();
+        if ((!receivedAnyByte && now - startTime >= firstByteTimeoutMs) ||
+            (receivedAnyByte && now - lastByteTime >= interByteTimeoutMs)) {
+            break;
+        }
+        delay(1);
     }
+
     // Clean data to remove header "AA 55"
     size_t writeIndex = 0;
     for (size_t i = 0; i < bytesRead; i++) {
-        if (buffer[i] == 0xAA && buffer[i + 1] == 0x55) {
+        if (i + 1 < bytesRead && buffer[i] == 0xAA && buffer[i + 1] == 0x55) {
             // Skip header
             i++;  // Move to the next byte
         } else {
@@ -1669,4 +1681,264 @@ int8_t UnitRoller485::writeI2cId(uint8_t id, uint8_t address, bool saveFlashEn, 
     int8_t state                         = verifyData(writeI2cNum, sizeof(writeI2cNum), true);
     releaseMutex();
     return state;
+}
+
+int8_t UnitRoller485::setPosTurnAngle(uint8_t id, int32_t turn, uint16_t angle, int32_t maxCurrent)
+{
+    if (angle > 35999U || maxCurrent < 0 || maxCurrent > 1200) {
+        return ROLLER_WRITE_FAILED;
+    }
+
+    uint8_t request[15]  = {};
+    uint8_t response[17] = {};
+    request[0]           = ROLLER485_EXTENDED_POSITION_CMD;
+    request[1]           = id;
+    writeInt32LE(request + 2, turn);
+    request[6] = static_cast<uint8_t>(angle);
+    request[7] = static_cast<uint8_t>(angle >> 8);
+    writeInt32LE(request + 10, maxCurrent * 100);
+    request[14] = crc8(request, sizeof(request) - 1);
+
+    int8_t result =
+        transactV3(request, sizeof(request), ROLLER485_EXTENDED_POSITION_CMD + 0x10, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    if (readInt32LE(response + 4) != turn || readUint16LE(response + 8) != angle || response[10] != 0 ||
+        response[11] != 0 || readInt32LE(response + 12) != maxCurrent * 100) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRoller485::getPosTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle)
+{
+    if (turn == nullptr || angle == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    uint8_t response[20] = {};
+    int8_t result        = queryV3(ROLLER485_READ_EXTENDED_POSITION_CMD, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+
+    uint16_t value = readUint16LE(response + 16);
+    if (value > 35999U || response[18] != 0) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    *turn  = readInt32LE(response + 12);
+    *angle = value;
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRoller485::getPosReadbackTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle)
+{
+    if (turn == nullptr || angle == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    uint8_t response[20] = {};
+    int8_t result        = queryV3(ROLLER485_READ_EXTENDED_POSITION_CMD, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+
+    uint16_t value = readUint16LE(response + 8);
+    if (value > 35999U || response[10] != 0 || response[11] != 0) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    *turn  = readInt32LE(response + 4);
+    *angle = value;
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRoller485::getUID(uint8_t id, uint8_t *uid)
+{
+    if (uid == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    uint8_t response[20] = {};
+    int8_t result        = queryV3(ROLLER485_READ_DEVICE_INFO_CMD, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    memcpy(uid, response + 4, 12);
+    return response[18] == 0 ? ROLLER_WRITE_SUCCESS : ROLLER_UNEXPECTED_RESPONSE;
+}
+
+int8_t UnitRoller485::getDeviceTypeID(uint8_t id, uint8_t *deviceId)
+{
+    if (deviceId == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    uint8_t response[20] = {};
+    int8_t result        = queryV3(ROLLER485_READ_DEVICE_INFO_CMD, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    if (response[18] != 0) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    *deviceId = response[16];
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRoller485::getFirmwareVersion(uint8_t id, uint8_t *version)
+{
+    if (version == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    uint8_t response[20] = {};
+    int8_t result        = queryV3(ROLLER485_READ_DEVICE_INFO_CMD, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    if (response[18] != 0) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    *version = response[17];
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRoller485::getCurrentParameters(uint8_t id, roller485_current_t *parameters)
+{
+    if (parameters == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    uint8_t response[20] = {};
+    int8_t result        = queryV3(ROLLER485_READ_CURRENT_PARAMETERS_CMD, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    if (response[16] != 0 || response[17] != 0 || response[18] != 0) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    int32_t speedMaxCurrent    = readInt32LE(response + 4);
+    int32_t positionMaxCurrent = readInt32LE(response + 8);
+    int32_t currentTarget      = readInt32LE(response + 12);
+    if (speedMaxCurrent < 0 || speedMaxCurrent > 120000 || positionMaxCurrent < 0 || positionMaxCurrent > 120000 ||
+        currentTarget < -120000 || currentTarget > 120000) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    parameters->speedLimit    = speedMaxCurrent;
+    parameters->posLimit      = positionMaxCurrent;
+    parameters->currentTarget = currentTarget;
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRoller485::getTargetConfiguration(uint8_t id, roller485_config_t *configuration)
+{
+    if (configuration == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    uint8_t response[20] = {};
+    int8_t result        = queryV3(ROLLER485_READ_TARGET_CONFIG_CMD, id, response, sizeof(response));
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    if (response[12] > 1 || response[13] > 1 || response[14] > 1 || response[15] > 1 || response[16] < 0x08 ||
+        response[16] > 0x77 || response[17] > 2 || response[18] > 1) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    configuration->speedTarget         = readInt32LE(response + 4);
+    configuration->posTarget           = readInt32LE(response + 8);
+    configuration->output              = response[12] != 0;
+    configuration->overVoltageRecovery = response[13] != 0;
+    configuration->stallProtect        = response[14] != 0;
+    configuration->posRangeProtect     = response[15] != 0;
+    configuration->i2cAddr             = response[16];
+    configuration->baudRate            = static_cast<roller_bps_t>(response[17]);
+    configuration->keySwitch           = response[18] != 0;
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRoller485::transactV3(const uint8_t *request, size_t requestLength, uint8_t expectedCommand, uint8_t id,
+                                 uint8_t *response, size_t responseLength)
+{
+    if (request == nullptr || response == nullptr || responseLength < 5) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    acquireMutex();
+    while (serialPort->available() > 0) {
+        serialPort->read();
+    }
+    if (!sendData(reinterpret_cast<const char *>(request), requestLength)) {
+        releaseMutex();
+        return ROLLER_SERIAL_SEND_FAILURE;
+    }
+
+    int8_t result = readV3Frame(response, responseLength);
+    if (result == ROLLER_WRITE_SUCCESS) {
+        if (response[2] != expectedCommand || response[3] != id) {
+            result = ROLLER_UNEXPECTED_RESPONSE;
+        } else if (crc8(response + 2, responseLength - 3) != response[responseLength - 1]) {
+            result = ROLLER_CRC_CHECK_FAIL;
+        }
+    }
+    releaseMutex();
+    return result;
+}
+
+int8_t UnitRoller485::queryV3(uint8_t command, uint8_t id, uint8_t *response, size_t responseLength)
+{
+    uint8_t request[4] = {command, id, 0, 0};
+    request[3]         = crc8(request, sizeof(request) - 1);
+    return transactV3(request, sizeof(request), command + 0x10, id, response, responseLength);
+}
+
+int8_t UnitRoller485::readV3Frame(uint8_t *response, size_t responseLength)
+{
+    size_t received       = 0;
+    unsigned long started = millis();
+    while (millis() - started < 500) {
+        if (serialPort->available() <= 0) {
+            delay(1);
+            continue;
+        }
+        uint8_t value = static_cast<uint8_t>(serialPort->read());
+        if (received == 0) {
+            if (value == 0xAA) {
+                response[received++] = value;
+            }
+            continue;
+        }
+        if (received == 1) {
+            if (value == 0x55) {
+                response[received++] = value;
+            } else {
+                received = value == 0xAA ? 1 : 0;
+                if (received != 0) {
+                    response[0] = value;
+                }
+            }
+            continue;
+        }
+        response[received++] = value;
+        if (received == responseLength) {
+            return ROLLER_WRITE_SUCCESS;
+        }
+    }
+    return ROLLER_SERIAL_TIMEOUT;
+}
+
+int32_t UnitRoller485::readInt32LE(const uint8_t *data)
+{
+    return static_cast<int32_t>(static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
+                                (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24));
+}
+
+uint16_t UnitRoller485::readUint16LE(const uint8_t *data)
+{
+    return static_cast<uint16_t>(data[0] | (static_cast<uint16_t>(data[1]) << 8));
+}
+
+void UnitRoller485::writeInt32LE(uint8_t *data, int32_t value)
+{
+    uint32_t raw = static_cast<uint32_t>(value);
+    data[0]      = static_cast<uint8_t>(raw);
+    data[1]      = static_cast<uint8_t>(raw >> 8);
+    data[2]      = static_cast<uint8_t>(raw >> 16);
+    data[3]      = static_cast<uint8_t>(raw >> 24);
 }

@@ -237,20 +237,18 @@ int8_t UnitRollerCAN::setRGB(uint8_t id, int32_t color)
     canData[4]   = (rgbValues[2] * 255) / 31;  // Expand to 255
     canData[5]   = (rgbValues[1] * 255) / 63;  // Expand to 255
     canData[6]   = (rgbValues[0] * 255) / 31;  // Expand to 255
+    const int32_t expectedColor =
+        (static_cast<int32_t>(canData[6]) << 16) | (static_cast<int32_t>(canData[5]) << 8) | canData[4];
     if (!sendData(id, ROLLERCAN_WRITE_CMD, 0, canData)) {
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    receiveData();
+    int8_t result = receiveData();
     releaseMutex();
-    getRGB(id, rgbValues);
-    int32_t rgbInt = ((rgbValues[0] << 16) | (rgbValues[1] << 8) | rgbValues[2]);
-    if (color != rgbInt) {
-        releaseMutex();
-        return ROLLER_WRITE_FAILED;
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
     }
-    releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return getMotorParameter(id, ROLLERCAN_RGB_COLOR) == expectedColor ? ROLLER_WRITE_SUCCESS : ROLLER_WRITE_FAILED;
 }
 
 int8_t UnitRollerCAN::setRGBBrightness(uint8_t id, uint8_t brightness)
@@ -1354,6 +1352,408 @@ int8_t UnitRollerCAN::writeBPS(uint8_t id, uint8_t addr, roller_bps_t bps)
         return ROLLER_WRITE_FAILED;
     }
     return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRollerCAN::setPosTurnAngle(uint8_t id, int32_t turn, uint16_t angle, int32_t maxCurrent)
+{
+    if (angle > 35999U || maxCurrent < 0 || maxCurrent > 1200) {
+        return ROLLER_WRITE_FAILED;
+    }
+
+    uint8_t request[8]  = {};
+    uint8_t response[8] = {};
+    writeInt32LE(request, turn);
+    request[4] = static_cast<uint8_t>(angle);
+    request[5] = static_cast<uint8_t>(angle >> 8);
+    request[6] = static_cast<uint8_t>(maxCurrent);
+    request[7] = static_cast<uint8_t>(maxCurrent >> 8);
+
+    int8_t result = transactCommand(id, ROLLERCAN_EXTENDED_POSITION_CMD, 0, request, response);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    return memcmp(request, response, sizeof(request)) == 0 ? ROLLER_WRITE_SUCCESS : ROLLER_UNEXPECTED_RESPONSE;
+}
+
+int8_t UnitRollerCAN::getPosTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle, uint16_t *maxCurrent)
+{
+    if (turn == nullptr || angle == nullptr || maxCurrent == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    uint8_t request[8]  = {};
+    uint8_t response[8] = {};
+    int8_t result       = transactCommand(id, ROLLERCAN_READ_EXTENDED_POSITION_CMD, 0, request, response);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+
+    uint16_t angleValue   = readUint16LE(response + 4);
+    uint16_t currentValue = readUint16LE(response + 6);
+    if (angleValue > 35999U || currentValue > 1200U) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    *turn       = readInt32LE(response);
+    *angle      = angleValue;
+    *maxCurrent = currentValue;
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRollerCAN::getPosReadbackTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle, int16_t *current)
+{
+    if (turn == nullptr || angle == nullptr || current == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    uint8_t request[8]  = {};
+    uint8_t response[8] = {};
+    int8_t result       = transactCommand(id, ROLLERCAN_READ_EXTENDED_POSITION_CMD, 1, request, response);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+
+    uint16_t angleValue = readUint16LE(response + 4);
+    if (angleValue > 35999U) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    *turn    = readInt32LE(response);
+    *angle   = angleValue;
+    *current = static_cast<int16_t>(readUint16LE(response + 6));
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRollerCAN::getFirmwareVersion(uint8_t id, uint8_t *version)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_FIRMWARE_VERSION, &value);
+    if (result == ROLLER_WRITE_SUCCESS && version != nullptr && value >= 0 && value <= UINT8_MAX) {
+        *version = static_cast<uint8_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::getDeviceTypeID(uint8_t id, uint8_t *deviceId)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_PRODUCT_DEVICE_ID, &value);
+    if (result == ROLLER_WRITE_SUCCESS && deviceId != nullptr && value >= 0 && value <= UINT8_MAX) {
+        *deviceId = static_cast<uint8_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::getUID(uint8_t id, uint8_t *uid)
+{
+    if (uid == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    int32_t words[3] = {};
+    for (uint16_t index = 0; index < 3; ++index) {
+        int8_t result = readFunctionValue(id, ROLLERCAN_UID_WORD_0 + index, &words[index]);
+        if (result != ROLLER_WRITE_SUCCESS) {
+            return result;
+        }
+    }
+    memcpy(uid, words, sizeof(words));
+    return ROLLER_WRITE_SUCCESS;
+}
+
+int8_t UnitRollerCAN::getMotorID(uint8_t id, uint8_t *motorId)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_CAN_ID, &value);
+    if (result == ROLLER_WRITE_SUCCESS && motorId != nullptr && value >= 0 && value <= UINT8_MAX) {
+        *motorId = static_cast<uint8_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::getBPS(uint8_t id, roller_bps_t *bps)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_CAN_BAUD_INDEX, &value);
+    if (result == ROLLER_WRITE_SUCCESS && bps != nullptr && value >= 0 && value <= 2) {
+        *bps = static_cast<roller_bps_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::getCommunicationMode(uint8_t id, uint8_t *mode)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_COMMUNICATION_MODE, &value);
+    if (result == ROLLER_WRITE_SUCCESS && mode != nullptr && value >= 1 && value <= 3) {
+        *mode = static_cast<uint8_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::getI2CAddress(uint8_t id, uint8_t *address)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_I2C_ADDRESS, &value);
+    if (result == ROLLER_WRITE_SUCCESS && address != nullptr && value >= 0x08 && value <= 0x77) {
+        *address = static_cast<uint8_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::getSysStatus(uint8_t id, uint8_t *status)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_SYSTEM_STATUS, &value);
+    if (result == ROLLER_WRITE_SUCCESS && status != nullptr && value >= 0 && value <= 2) {
+        *status = static_cast<uint8_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::getError(uint8_t id, uint8_t *error)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_ERROR_CODE, &value);
+    if (result == ROLLER_WRITE_SUCCESS && error != nullptr && value >= 0 && value <= UINT8_MAX) {
+        *error = static_cast<uint8_t>(value);
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::setStallProtection(uint8_t id, bool en)
+{
+    int8_t result = writeFunctionValue(id, ROLLERCAN_STALL_PROTECTION, en ? 1 : 0);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    bool readback = false;
+    result        = getStallProtection(id, &readback);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    return readback == en ? ROLLER_WRITE_SUCCESS : ROLLER_UNEXPECTED_RESPONSE;
+}
+
+int8_t UnitRollerCAN::getStallProtection(uint8_t id, bool *en)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_STALL_PROTECTION, &value);
+    if (result == ROLLER_WRITE_SUCCESS && en != nullptr && (value == 0 || value == 1)) {
+        *en = value != 0;
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::setPosRangeProtect(uint8_t id, bool en)
+{
+    int8_t result = writeFunctionValue(id, ROLLERCAN_POSITION_RANGE_PROTECTION, en ? 1 : 0);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    bool readback = false;
+    result        = getPosRangeProtect(id, &readback);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    return readback == en ? ROLLER_WRITE_SUCCESS : ROLLER_UNEXPECTED_RESPONSE;
+}
+
+int8_t UnitRollerCAN::getPosRangeProtect(uint8_t id, bool *en)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_POSITION_RANGE_PROTECTION, &value);
+    if (result == ROLLER_WRITE_SUCCESS && en != nullptr && (value == 0 || value == 1)) {
+        *en = value != 0;
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::setKeySwitchMode(uint8_t id, bool en)
+{
+    int8_t result = writeFunctionValue(id, ROLLERCAN_BUTTON_MODE_SWITCH, en ? 1 : 0);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    bool readback = false;
+    result        = getKeySwitchMode(id, &readback);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
+    return readback == en ? ROLLER_WRITE_SUCCESS : ROLLER_UNEXPECTED_RESPONSE;
+}
+
+int8_t UnitRollerCAN::getKeySwitchMode(uint8_t id, bool *en)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_BUTTON_MODE_SWITCH, &value);
+    if (result == ROLLER_WRITE_SUCCESS && en != nullptr && (value == 0 || value == 1)) {
+        *en = value != 0;
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::startAngleCal(uint8_t id)
+{
+    return writeFunctionValue(id, ROLLERCAN_START_ANGLE_CAL, 1);
+}
+
+int8_t UnitRollerCAN::updateAngleCal(uint8_t id)
+{
+    return writeFunctionValue(id, ROLLERCAN_UPDATE_ANGLE_CAL, 1);
+}
+
+int8_t UnitRollerCAN::getCalBusyStatus(uint8_t id, bool *busy)
+{
+    int32_t value = 0;
+    int8_t result = readFunctionValue(id, ROLLERCAN_ANGLE_CAL_BUSY, &value);
+    if (result == ROLLER_WRITE_SUCCESS && busy != nullptr && (value == 0 || value == 1)) {
+        *busy = value != 0;
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return result == ROLLER_WRITE_SUCCESS ? ROLLER_UNEXPECTED_RESPONSE : result;
+}
+
+int8_t UnitRollerCAN::transactCommand(uint8_t id, uint8_t command, uint8_t commandParameter, const uint8_t *request,
+                                      uint8_t *response)
+{
+    if (request == nullptr || response == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    acquireMutex();
+    twai_message_t stale = {};
+    while (twai_receive(&stale, 0) == ESP_OK) {
+    }
+    if (!sendData(id, command, commandParameter, request)) {
+        releaseMutex();
+        return ROLLER_SERIAL_SEND_FAILURE;
+    }
+
+    unsigned long started = millis();
+    while (millis() - started < 300) {
+        twai_message_t frame = {};
+        if (twai_receive(&frame, pdMS_TO_TICKS(10)) != ESP_OK) {
+            continue;
+        }
+        uint8_t responseCommand = static_cast<uint8_t>((frame.identifier >> 24) & 0x1F);
+        uint8_t responseResult  = static_cast<uint8_t>(frame.identifier >> 16);
+        uint8_t hostId          = static_cast<uint8_t>(frame.identifier >> 8);
+        uint8_t motorId         = static_cast<uint8_t>(frame.identifier);
+        if (!frame.extd || frame.rtr || frame.data_length_code != 8 || responseCommand != command ||
+            responseResult != 1 || hostId != 0 || motorId != id) {
+            continue;
+        }
+        memcpy(response, frame.data, 8);
+        releaseMutex();
+        return ROLLER_WRITE_SUCCESS;
+    }
+    releaseMutex();
+    return ROLLER_SERIAL_TIMEOUT;
+}
+
+int8_t UnitRollerCAN::readFunctionValue(uint8_t id, uint16_t functionIndex, int32_t *value)
+{
+    if (value == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    uint8_t request[8] = {};
+    request[0]         = static_cast<uint8_t>(functionIndex);
+    request[1]         = static_cast<uint8_t>(functionIndex >> 8);
+
+    acquireMutex();
+    twai_message_t stale = {};
+    while (twai_receive(&stale, 0) == ESP_OK) {
+    }
+    if (!sendData(id, ROLLERCAN_READ_CMD, 0, request)) {
+        releaseMutex();
+        return ROLLER_SERIAL_SEND_FAILURE;
+    }
+
+    unsigned long started = millis();
+    while (millis() - started < 300) {
+        twai_message_t frame = {};
+        if (twai_receive(&frame, pdMS_TO_TICKS(10)) != ESP_OK) {
+            continue;
+        }
+        uint8_t command = static_cast<uint8_t>((frame.identifier >> 24) & 0x1F);
+        uint8_t hostId  = static_cast<uint8_t>(frame.identifier >> 8);
+        uint8_t motorId = static_cast<uint8_t>(frame.identifier);
+        if (!frame.extd || frame.rtr || frame.data_length_code != 8 || command != ROLLERCAN_READ_CMD || hostId != 0 ||
+            motorId != id || readUint16LE(frame.data) != functionIndex || frame.data[2] != 0 || frame.data[3] != 0) {
+            continue;
+        }
+        *value = readInt32LE(frame.data + 4);
+        releaseMutex();
+        return ROLLER_WRITE_SUCCESS;
+    }
+    releaseMutex();
+    return ROLLER_SERIAL_TIMEOUT;
+}
+
+int8_t UnitRollerCAN::writeFunctionValue(uint8_t id, uint16_t functionIndex, int32_t value)
+{
+    uint8_t request[8] = {};
+    request[0]         = static_cast<uint8_t>(functionIndex);
+    request[1]         = static_cast<uint8_t>(functionIndex >> 8);
+    writeInt32LE(request + 4, value);
+
+    acquireMutex();
+    twai_message_t stale = {};
+    while (twai_receive(&stale, 0) == ESP_OK) {
+    }
+    if (!sendData(id, ROLLERCAN_WRITE_CMD, 0, request)) {
+        releaseMutex();
+        return ROLLER_SERIAL_SEND_FAILURE;
+    }
+
+    unsigned long started = millis();
+    while (millis() - started < 300) {
+        twai_message_t frame = {};
+        if (twai_receive(&frame, pdMS_TO_TICKS(10)) != ESP_OK) {
+            continue;
+        }
+        uint8_t command = static_cast<uint8_t>((frame.identifier >> 24) & 0x1F);
+        uint8_t motorId = static_cast<uint8_t>(frame.identifier >> 8);
+        uint8_t hostId  = static_cast<uint8_t>(frame.identifier);
+        if (!frame.extd || frame.rtr || frame.data_length_code != 8 || command != ROLLERCAN_STATUS_CMD ||
+            motorId != id || hostId != 0) {
+            continue;
+        }
+        releaseMutex();
+        return ROLLER_WRITE_SUCCESS;
+    }
+    releaseMutex();
+    return ROLLER_SERIAL_TIMEOUT;
+}
+
+int32_t UnitRollerCAN::readInt32LE(const uint8_t *data)
+{
+    return static_cast<int32_t>(static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
+                                (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24));
+}
+
+uint16_t UnitRollerCAN::readUint16LE(const uint8_t *data)
+{
+    return static_cast<uint16_t>(data[0] | (static_cast<uint16_t>(data[1]) << 8));
+}
+
+void UnitRollerCAN::writeInt32LE(uint8_t *data, int32_t value)
+{
+    uint32_t raw = static_cast<uint32_t>(value);
+    data[0]      = static_cast<uint8_t>(raw);
+    data[1]      = static_cast<uint8_t>(raw >> 8);
+    data[2]      = static_cast<uint8_t>(raw >> 16);
+    data[3]      = static_cast<uint8_t>(raw >> 24);
 }
 
 bool UnitRollerCAN::sendData(uint8_t can_id, uint8_t cmd_id, uint16_t option, const uint8_t *data)

@@ -252,6 +252,104 @@
  */
 #define ROLLERCAN_WRITE_I2C_RAW_CMD (0x16)
 
+/**
+ * @brief Command to set the extended target position and position-mode current limit.
+ */
+#define ROLLERCAN_EXTENDED_POSITION_CMD (0x17)
+
+/**
+ * @brief Command to read the extended target or actual position.
+ */
+#define ROLLERCAN_READ_EXTENDED_POSITION_CMD (0x18)
+
+/**
+ * @brief Read-only function index for the firmware version.
+ */
+#define ROLLERCAN_FIRMWARE_VERSION (0x7060)
+
+/**
+ * @brief Read-only function index for the product device type ID.
+ */
+#define ROLLERCAN_PRODUCT_DEVICE_ID (0x7061)
+
+/**
+ * @brief Read-only function index for UID bytes 0-3.
+ */
+#define ROLLERCAN_UID_WORD_0 (0x7062)
+
+/**
+ * @brief Read-only function index for UID bytes 4-7.
+ */
+#define ROLLERCAN_UID_WORD_1 (0x7063)
+
+/**
+ * @brief Read-only function index for UID bytes 8-11.
+ */
+#define ROLLERCAN_UID_WORD_2 (0x7064)
+
+/**
+ * @brief Read-only function index for the current motor CAN ID.
+ */
+#define ROLLERCAN_CAN_ID (0x7065)
+
+/**
+ * @brief Read-only function index for the CAN baud-rate index.
+ *
+ * Values: 0 = 1 Mbps, 1 = 500 kbps, 2 = 125
+ * kbps.
+ */
+#define ROLLERCAN_CAN_BAUD_INDEX (0x7066)
+
+/**
+ * @brief Read-only function index for the current communication mode.
+ */
+#define ROLLERCAN_COMMUNICATION_MODE (0x7067)
+
+/**
+ * @brief Read-only function index for the current 7-bit I2C address.
+ */
+#define ROLLERCAN_I2C_ADDRESS (0x7068)
+
+/**
+ * @brief Read-only function index for the system status.
+ */
+#define ROLLERCAN_SYSTEM_STATUS (0x7069)
+
+/**
+ * @brief Read-only function index for the error-code bit field.
+ */
+#define ROLLERCAN_ERROR_CODE (0x706A)
+
+/**
+ * @brief Read/write function index for stall protection enable.
+ */
+#define ROLLERCAN_STALL_PROTECTION (0x706B)
+
+/**
+ * @brief Read/write function index for position range protection enable.
+ */
+#define ROLLERCAN_POSITION_RANGE_PROTECTION (0x706C)
+
+/**
+ * @brief Read/write function index for local key mode switching.
+ */
+#define ROLLERCAN_BUTTON_MODE_SWITCH (0x706D)
+
+/**
+ * @brief Write-only function index used to start encoder calibration.
+ */
+#define ROLLERCAN_START_ANGLE_CAL (0x7070)
+
+/**
+ * @brief Write-only function index used to save encoder calibration data.
+ */
+#define ROLLERCAN_UPDATE_ANGLE_CAL (0x7071)
+
+/**
+ * @brief Read-only function index for encoder calibration busy status.
+ */
+#define ROLLERCAN_ANGLE_CAL_BUSY (0x7072)
+
 class UnitRollerCAN {
 public:
     uint8_t readData[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -803,6 +901,51 @@ public:
     int8_t setPosition(uint8_t id, int32_t position);
 
     /**
+     * @brief Sets the extended target position and position-mode current limit.
+     *
+     * @param id Motor
+     * CAN ID. Valid range: 0-255.
+     * @param turn Signed target number of complete turns.
+     * @param angle Target
+     * in-turn angle in 0.01 degree units. Valid range: 0-35999.
+     * @param maxCurrent Position-mode current limit in
+     * mA. Valid range: 0-1200.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error
+     * code.
+     */
+    int8_t setPosTurnAngle(uint8_t id, int32_t turn, uint16_t angle, int32_t maxCurrent);
+
+    /**
+     * @brief Reads the extended target position and position-mode current limit.
+     *
+     * @param id Motor
+     * CAN ID. Valid range: 0-255.
+     * @param turn Pointer that receives the signed target number of complete turns.
+
+     * * @param angle Pointer that receives the target in-turn angle in 0.01 degree units.
+     * @param maxCurrent
+     * Pointer that receives the position-mode current limit in mA.
+     * @return ROLLER_WRITE_SUCCESS on success;
+     * otherwise a roller_errcode_t error code.
+     */
+    int8_t getPosTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle, uint16_t *maxCurrent);
+
+    /**
+     * @brief Reads the extended actual position and measured current.
+     *
+     * @param id Motor CAN ID.
+     * Valid range: 0-255.
+     * @param turn Pointer that receives the signed actual number of complete turns.
+     *
+     * @param angle Pointer that receives the actual in-turn angle in 0.01 degree units.
+     * @param current Pointer
+     * that receives the signed measured current in mA.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a
+     * roller_errcode_t error code.
+     */
+    int8_t getPosReadbackTurnAngle(uint8_t id, int32_t *turn, uint16_t *angle, int16_t *current);
+
+    /**
      * @brief Sets the current position value for the specified motor.
      *
      * This function configures the current position of the motor identified by
@@ -1222,6 +1365,210 @@ public:
      *         A return value of 0 typically indicates no error.
      */
     int8_t getError(uint8_t id);
+
+    /**
+     * @brief Reads the motor firmware version.
+     *
+     * @param id Motor CAN ID. Valid range: 0-255.
+     *
+     * @param version Pointer that receives the one-byte firmware version.
+     * @return ROLLER_WRITE_SUCCESS on
+     * success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getFirmwareVersion(uint8_t id, uint8_t *version);
+
+    /**
+     * @brief Reads the product device type ID.
+     *
+     * @param id Motor CAN ID. Valid range: 0-255.
+     *
+     * @param deviceId Pointer that receives the one-byte product type identifier.
+     * @return ROLLER_WRITE_SUCCESS
+     * on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getDeviceTypeID(uint8_t id, uint8_t *deviceId);
+
+    /**
+     * @brief Reads the STM32 96-bit unique device ID.
+     *
+     * @param id Motor CAN ID. Valid range:
+     * 0-255.
+     * @param uid Pointer to a caller-provided buffer of at least 12 bytes.
+     * @return
+     * ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getUID(uint8_t id, uint8_t *uid);
+
+    /**
+     * @brief Reads the motor's currently configured CAN ID.
+     *
+     * @param id Motor CAN ID used for this
+     * query. Valid range: 0-255.
+     * @param motorId Pointer that receives the configured CAN ID.
+     * @return
+     * ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getMotorID(uint8_t id, uint8_t *motorId);
+
+    /**
+     * @brief Reads the configured CAN baud-rate index.
+     *
+     * @param id Motor CAN ID. Valid range:
+     * 0-255.
+     * @param bps Pointer that receives the baud-rate index: 0 = 1 Mbps,
+     *            1 = 500 kbps, 2
+     * = 125 kbps.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getBPS(uint8_t id, roller_bps_t *bps);
+
+    /**
+     * @brief Reads the currently configured communication mode.
+     *
+     * @param id Motor CAN ID. Valid
+     * range: 0-255.
+     * @param mode Pointer that receives the communication mode value in the range 1-3.
+     *
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getCommunicationMode(uint8_t id, uint8_t *mode);
+
+    /**
+     * @brief Reads the motor's currently configured 7-bit I2C address.
+     *
+     * @param id Motor CAN ID.
+     * Valid range: 0-255.
+     * @param address Pointer that receives the I2C address. Valid range: 0x08-0x77.
+     *
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getI2CAddress(uint8_t id, uint8_t *address);
+
+    /**
+     * @brief Reads the system status through the extended function interface.
+     *
+     * @param id Motor CAN
+     * ID. Valid range: 0-255.
+     * @param status Pointer that receives the system status value in the range 0-2.
+
+     * * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getSysStatus(uint8_t id, uint8_t *status);
+
+    /**
+     * @brief Reads the error-code bit field through the extended function interface.
+     *
+     * @param id
+     * Motor CAN ID. Valid range: 0-255.
+     * @param error Pointer that receives the one-byte error-code bit field.
+
+     * * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getError(uint8_t id, uint8_t *error);
+
+    /**
+     * @brief Enables or disables stall protection.
+     *
+     * The function writes the setting and verifies
+     * it by reading it back.
+     *
+     * @param id Motor CAN ID. Valid range: 0-255.
+     * @param en true to enable
+     * stall protection; false to disable it.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a
+     * roller_errcode_t error code.
+     */
+    int8_t setStallProtection(uint8_t id, bool en);
+
+    /**
+     * @brief Reads the stall protection enable state.
+     *
+     * @param id Motor CAN ID. Valid range:
+     * 0-255.
+     * @param en Pointer that receives the stall protection state.
+     * @return ROLLER_WRITE_SUCCESS on
+     * success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getStallProtection(uint8_t id, bool *en);
+
+    /**
+     * @brief Enables or disables position range protection.
+     *
+     * The function writes the setting and
+     * verifies it by reading it back.
+     *
+     * @param id Motor CAN ID. Valid range: 0-255.
+     * @param en true
+     * to enable position range protection; false to disable it.
+     * @return ROLLER_WRITE_SUCCESS on success;
+     * otherwise a roller_errcode_t error code.
+     */
+    int8_t setPosRangeProtect(uint8_t id, bool en);
+
+    /**
+     * @brief Reads the position range protection enable state.
+     *
+     * @param id Motor CAN ID. Valid
+     * range: 0-255.
+     * @param en Pointer that receives the position range protection state.
+     * @return
+     * ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getPosRangeProtect(uint8_t id, bool *en);
+
+    /**
+     * @brief Enables or disables local key mode switching.
+     *
+     * The function writes the setting and
+     * verifies it by reading it back.
+     *
+     * @param id Motor CAN ID. Valid range: 0-255.
+     * @param en true
+     * to enable local key mode switching; false to disable it.
+     * @return ROLLER_WRITE_SUCCESS on success;
+     * otherwise a roller_errcode_t error code.
+     */
+    int8_t setKeySwitchMode(uint8_t id, bool en);
+
+    /**
+     * @brief Reads the local key mode-switch enable state.
+     *
+     * @param id Motor CAN ID. Valid range:
+     * 0-255.
+     * @param en Pointer that receives the local key mode-switch state.
+     * @return
+     * ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getKeySwitchMode(uint8_t id, bool *en);
+
+    /**
+     * @brief Starts encoder calibration.
+     *
+     * @param id Motor CAN ID. Valid range: 0-255.
+     *
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t startAngleCal(uint8_t id);
+
+    /**
+     * @brief Saves a completed encoder calibration result.
+     *
+     * @param id Motor CAN ID. Valid range:
+     * 0-255.
+     * @return ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t updateAngleCal(uint8_t id);
+
+    /**
+     * @brief Reads the encoder calibration busy state.
+     *
+     * @param id Motor CAN ID. Valid range:
+     * 0-255.
+     * @param busy Pointer that receives true while calibration is running.
+     * @return
+     * ROLLER_WRITE_SUCCESS on success; otherwise a roller_errcode_t error code.
+     */
+    int8_t getCalBusyStatus(uint8_t id, bool *busy);
 
     /**
      * @brief Enables or disables stall protection for the specified motor.
@@ -2612,13 +2959,21 @@ public:
     int8_t readBPS(uint8_t id, uint8_t addr);
 
 private:
+    int8_t transactCommand(uint8_t id, uint8_t command, uint8_t commandParameter, const uint8_t *request,
+                           uint8_t *response);
+    int8_t readFunctionValue(uint8_t id, uint16_t functionIndex, int32_t *value);
+    int8_t writeFunctionValue(uint8_t id, uint16_t functionIndex, int32_t value);
+    static int32_t readInt32LE(const uint8_t *data);
+    static uint16_t readUint16LE(const uint8_t *data);
+    static void writeInt32LE(uint8_t *data, int32_t value);
+
     int8_t txNum;
     int8_t rxNum;
     bool mutexLocked;
     uint8_t recv_motorId;
     uint8_t recv_faultInfo;
     uint8_t recv_mode;
-    bool recv_status;
+    uint8_t recv_status;
     uint8_t canData[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 };
 #endif

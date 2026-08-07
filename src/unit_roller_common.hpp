@@ -55,6 +55,32 @@ typedef enum {
 } roller_rgb_t;
 
 /**
+ * @brief RS485 current limits and target-current readback.
+ *
+ * All fields use the protocol unit of 0.01 mA.
+ */
+typedef struct {
+    int32_t speedLimit;    /**< Speed-mode current limit. */
+    int32_t posLimit;      /**< Position-mode current limit. */
+    int32_t currentTarget; /**< Current-mode target current. */
+} roller485_current_t;
+
+/**
+ * @brief RS485 target values and device configuration readback.
+ */
+typedef struct {
+    int32_t speedTarget;      /**< Speed target in 0.01 rpm. */
+    int32_t posTarget;        /**< Legacy position target in 0.01 degree. */
+    bool output;              /**< Motor output state. */
+    bool overVoltageRecovery; /**< Overvoltage automatic recovery state. */
+    bool stallProtect;        /**< Stall protection state. */
+    bool posRangeProtect;     /**< Position range protection state. */
+    uint8_t i2cAddr;          /**< Current 7-bit I2C address. */
+    roller_bps_t baudRate;    /**< RS485 baud-rate index. */
+    bool keySwitch;           /**< Local key mode-switch state. */
+} roller485_config_t;
+
+/**
  * @brief I2C Address of the Unit Roller device.
  *
  * This address is used to identify the Unit Roller device on the I2C bus.
@@ -210,11 +236,45 @@ typedef enum {
 #define I2C_POS_REG (0x80)
 
 /**
+ * @brief Extended target full-turn count register.
+ *
+ * The register stores a signed 32-bit little-endian turn
+ * count at 0x88-0x8B.
+ */
+#define I2C_POS_TURN_REG (0x88)
+
+/**
+ * @brief Extended target in-turn angle register.
+ *
+ * The register stores an unsigned 16-bit little-endian angle
+ * at 0x8C-0x8D.
+ * The unit is 0.01 degree and the valid range is 0-35999.
+ */
+#define I2C_POS_ANGLE_REG (0x8C)
+
+/**
  * @brief Position Readback Register.
  *
  * This register allows reading back the position of the Unit Roller.
  */
 #define I2C_POS_READBACK_REG (0x90)
+
+/**
+ * @brief Extended actual full-turn count register.
+ *
+ * The register returns a signed 32-bit little-endian turn
+ * count at 0x98-0x9B.
+ */
+#define I2C_POS_READBACK_TURN_REG (0x98)
+
+/**
+ * @brief Extended actual in-turn angle register.
+ *
+ * The register returns an unsigned 16-bit little-endian angle
+ * at 0x9C-0x9D.
+ * The unit is 0.01 degree and the valid range is 0-35999.
+ */
+#define I2C_POS_READBACK_ANGLE_REG (0x9C)
 
 /**
  * @brief Position PID Register.
@@ -236,6 +296,13 @@ typedef enum {
  * This register allows reading back the current value.
  */
 #define I2C_CURRENT_READBACK_REG (0xC0)
+
+/**
+ * @brief STM32 96-bit unique device ID start register.
+ *
+ * Read 12 consecutive bytes from 0xE0-0xEB.
+ */
+#define I2C_UID_REG (0xE0)
 
 /**
  * @brief Save to Flash Register.
@@ -279,6 +346,14 @@ typedef enum {
  * This is an internal factory register used to retrieve the calibration status of the magnetic encoder.
  */
 #define GET_ANGLE_BUSY_REG (0xF3)
+
+/**
+ * @brief Product device type ID register.
+ *
+ * The register returns one byte identifying the Roller product type.
+
+ */
+#define I2C_DEVICE_ID_REG (0xF4)
 
 extern bool mutexLocked;
 

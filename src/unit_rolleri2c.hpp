@@ -158,6 +158,30 @@ public:
     void setPos(int32_t pos);
 
     /**
+     * @brief Sets the full-turn portion of the extended target position.
+     *
+     * This function writes a
+     * signed 32-bit turn count to I2C_POS_TURN_REG.
+     * The current in-turn target angle is retained.
+     *
+     *
+     * @param turn Target number of complete turns.
+     */
+    void setPosTurn(int32_t turn);
+
+    /**
+     * @brief Sets the in-turn angle portion of the extended target position.
+     *
+     * This function writes
+     * the angle to I2C_POS_ANGLE_REG. The current target
+     * turn count is retained.
+     *
+     * @param angle
+     * Target in-turn angle in 0.01 degree units. Valid range: 0-35999.
+     */
+    void setPosAngle(uint16_t angle);
+
+    /**
      * @brief Sets the maximum current limit for position control in the UnitRollerI2C device.
      *
      * This function writes a 32-bit integer value to the maximum current register of the
@@ -620,6 +644,22 @@ public:
     int32_t getPos(void);
 
     /**
+     * @brief Reads the full-turn portion of the extended target position.
+     *
+     * @return Signed number
+     * of commanded complete turns.
+     */
+    int32_t getPosTurn(void);
+
+    /**
+     * @brief Reads the in-turn angle portion of the extended target position.
+     *
+     * @return Commanded
+     * in-turn angle in 0.01 degree units. Range: 0-35999.
+     */
+    uint16_t getPosAngle(void);
+
+    /**
      * @brief Retrieves the maximum current value permitted at the specified position
      * from the UnitRollerI2C device.
      *
@@ -657,6 +697,22 @@ public:
      *       properly initialized before calling this function.
      */
     int32_t getPosReadback(void);
+
+    /**
+     * @brief Reads the full-turn portion of the extended actual position.
+     *
+     * @return Signed number
+     * of actual complete turns.
+     */
+    int32_t getPosReadbackTurn(void);
+
+    /**
+     * @brief Reads the in-turn angle portion of the extended actual position.
+     *
+     * @return Actual
+     * in-turn angle in 0.01 degree units. Range: 0-35999.
+     */
+    uint16_t getPosReadbackAngle(void);
 
     /**
      * @brief Retrieves the current value from the UnitRollerI2C device.
@@ -979,6 +1035,23 @@ public:
      *       properly initialized before calling this function.
      */
     uint8_t getFirmwareVersion(void);
+
+    /**
+     * @brief Reads the STM32 96-bit unique device ID.
+     *
+     * @param uid Pointer to a caller-provided
+     * buffer of at least 12 bytes.
+     *            A null pointer is ignored.
+     */
+    void getUID(uint8_t *uid);
+
+    /**
+     * @brief Reads the product device type ID.
+     *
+     * @return One-byte Roller product type identifier.
+
+     */
+    uint8_t getDeviceTypeID(void);
 
     /**
      * @brief Retrieves the I2C address from the UnitRollerI2C device.
