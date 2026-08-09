@@ -81,8 +81,51 @@ float UnitRollerI2C::bytesToFloat(uint8_t *s)
     return bytes_union_t.value;
 }
 
+bool UnitRollerI2C::readRegister8(uint8_t reg, uint8_t &value)
+{
+    _wire->beginTransmission(_addr);
+    if (_wire->write(reg) != 1 || _wire->endTransmission(false) != 0) return false;
+    if (_wire->requestFrom(_addr, static_cast<uint8_t>(1)) != 1 || _wire->available() <= 0) return false;
+    value = static_cast<uint8_t>(_wire->read());
+    return true;
+}
+
+void UnitRollerI2C::warnIfLegacyFirmware()
+{
+    constexpr uint8_t kRoller485DefaultId = 0x00;
+    constexpr uint8_t kRollerCANDefaultId = 0xA8;
+    uint8_t addressFirst                  = 0;
+    uint8_t addressSecond                 = 0;
+    uint8_t addressFinal                  = 0;
+    uint8_t productFirst                  = 0;
+    uint8_t productSecond                 = 0;
+    uint8_t version                       = 0;
+    uint8_t motorId                       = 0;
+
+    // Legacy firmware keeps the previous response for unknown registers. Prime 0xF4 with the known I2C address.
+    if (!readRegister8(I2C_ADDRESS_REG, addressFirst) || addressFirst != _addr ||
+        !readRegister8(I2C_DEVICE_ID_REG, productFirst) || !readRegister8(I2C_ADDRESS_REG, addressSecond) ||
+        addressSecond != _addr || !readRegister8(I2C_DEVICE_ID_REG, productSecond) ||
+        !readRegister8(I2C_FIRMWARE_VERSION_REG, version) || !readRegister8(I2C_ID_REG, motorId) ||
+        !readRegister8(I2C_ADDRESS_REG, addressFinal) || addressFinal != _addr) {
+        return;
+    }
+
+    const bool productKnown = productFirst == productSecond &&
+                              ((productFirst == 0x01 && version >= 2) || (productFirst == 0x02 && version >= 3));
+    const bool legacyVersion = version >= 1 && version <= 2;
+    const bool defaultId     = motorId == kRoller485DefaultId || motorId == kRollerCANDefaultId;
+    if (productKnown || !legacyVersion || !defaultId) return;
+
+    Serial.printf(
+        "\033[33m[UnitRoller][WARNING] Legacy firmware V%u detected (communication ID 0x%02X). "
+        "Please run the matching IAP firmware update example.\033[0m\r\n",
+        version, motorId);
+}
+
 bool UnitRollerI2C::begin(TwoWire *wire, uint8_t addr, uint8_t sda, uint8_t scl, uint32_t speed)
 {
+    if (wire == nullptr) return false;
     _wire  = wire;
     _addr  = addr;
     _sda   = sda;
@@ -94,6 +137,7 @@ bool UnitRollerI2C::begin(TwoWire *wire, uint8_t addr, uint8_t sda, uint8_t scl,
     _wire->beginTransmission(_addr);
     uint8_t error = _wire->endTransmission();
     if (error == 0) {
+        warnIfLegacyFirmware();
         return true;
     } else {
         return false;

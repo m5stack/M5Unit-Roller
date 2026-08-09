@@ -18,6 +18,27 @@ Additionally, the unit is equipped with a 0.66-inch OLED display on the back, wh
 - [U182  Document & Datasheet](https://docs.m5stack.com/en/unit/Unit-Roller485)
 - [U188  Document & Datasheet](https://docs.m5stack.com/en/unit/Unit-RollerCAN)
 
+## Firmware Update over I2C
+
+The library includes standalone serial-guided firmware update examples for ESP32 and ESP32-S3 boards. They use only
+the Arduino `Wire` and `Serial` APIs, so an M5Stack host with a display is not required.
+
+- `examples/i2c/firmware_update_485`: updates Roller485 to V2
+- `examples/i2c/firmware_update_can`: updates RollerCAN to V3
+
+Before uploading an example, set `kSdaPin` and `kSclPin` for the board's GROVE connector. Connect exactly one Unit
+Roller, open the Serial Monitor at 115200 baud, and follow the confirmation prompt. The examples support both a normal
+application update and recovery when the motor starts directly in its Bootloader. Do not remove power or disconnect
+I2C while the update is running.
+
+Current firmware reports a product ID over I2C. Legacy firmware does not, and its communication ID may have been
+customized, so the examples require explicit model confirmation whenever identity cannot be verified. A successful
+update is followed by product and firmware-version verification.
+
+When `UnitRollerI2C::begin()` detects legacy V1/V2 firmware that still uses the Roller485 (`0x00`) or RollerCAN
+(`0xA8`) factory communication ID, it prints a yellow serial warning recommending the matching update example.
+Customized IDs remain silent.
+
 ## License
 
 - [MIT](LICENSE)

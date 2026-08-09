@@ -34,7 +34,7 @@ public:
      *       the I2C configuration to allow the device time to stabilize.
      */
     bool begin(TwoWire *wire = &Wire, uint8_t addr = I2C_ADDR, uint8_t sda = 21, uint8_t scl = 22,
-               uint32_t speed = 4000000L);
+               uint32_t speed = 400000L);
 
     /**
      * @brief Sets the operational mode of the UnitRollerI2C device.
@@ -1077,6 +1077,9 @@ private:
     uint8_t _scl;
     uint8_t _sda;
     uint32_t _speed;
+
+    bool readRegister8(uint8_t reg, uint8_t &value);
+    void warnIfLegacyFirmware();
 
     /**
      * @brief Writes a sequence of bytes to a specific register on a device.
