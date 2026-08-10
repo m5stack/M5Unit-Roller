@@ -31,6 +31,13 @@ Roller, open the Serial Monitor at 115200 baud, and follow the confirmation prom
 application update and recovery when the motor starts directly in its Bootloader. Do not remove power or disconnect
 I2C while the update is running.
 
+Both published legacy Bootloaders and current Bootloaders are supported through their common fixed `0x54` address
+and ACK-based page-completion handshake. The updater deliberately avoids Bootloader reads because released legacy
+Bootloaders cannot complete slave-read transactions.
+
+Model mismatches, same-version reflashes, downgrades, unknown identities, and Bootloader recovery may be explicitly
+authorized after showing a warning. This permits recovery when the wrong Roller application was previously installed.
+
 Current firmware reports a product ID over I2C. Legacy firmware does not, and its communication ID may have been
 customized, so the examples require explicit model confirmation whenever identity cannot be verified. A successful
 update is followed by product and firmware-version verification.

@@ -20,7 +20,7 @@ constexpr uint8_t kMotorIdRegister       = 0x10;
 constexpr uint8_t kProductRegister       = 0xF4;
 constexpr uint8_t kVersionRegister       = 0xFE;
 constexpr uint8_t kAddressRegister       = 0xFF;
-constexpr uint8_t kMaximumBootStatus     = 12;
+constexpr uint8_t kPageRetries           = 3;
 
 }  // namespace
 
@@ -99,13 +99,6 @@ bool UnitRollerIAP::write8(uint8_t address, uint8_t reg, uint8_t value)
     return write(address, reg, &value, sizeof(value));
 }
 
-bool UnitRollerIAP::rawRead8(uint8_t address, uint8_t &value)
-{
-    if (wire_->requestFrom(address, static_cast<uint8_t>(1)) != 1 || wire_->available() <= 0) return false;
-    value = static_cast<uint8_t>(wire_->read());
-    return true;
-}
-
 bool UnitRollerIAP::rawWrite(uint8_t address, const uint8_t *data, size_t length)
 {
     if (data == nullptr || length == 0) return false;
@@ -149,33 +142,20 @@ bool UnitRollerIAP::readApplication(uint8_t address, UnitRollerIAPDevice &device
     return true;
 }
 
-bool UnitRollerIAP::readBootloaderStatus(uint8_t &status)
-{
-    uint8_t first  = 0;
-    uint8_t second = 0;
-    if (!rawRead8(kBootloaderAddress, first) || first > kMaximumBootStatus) return false;
-    delay(5);
-    if (!rawRead8(kBootloaderAddress, second) || second > kMaximumBootStatus || first != second) return false;
-    status = second;
-    return true;
-}
-
 UnitRollerIAPDevice UnitRollerIAP::detect()
 {
     UnitRollerIAPDevice found;
     if (wire_ == nullptr) return found;
 
     uint8_t candidates     = 0;
-    uint8_t bootStatus     = 0;
     bool bootloaderPresent = false;
     for (uint8_t address = 0x08; address <= 0x77; ++address) {
         if (address == kBootloaderAddress) {
-            UnitRollerIAPDevice candidate;
-            if (readApplication(address, candidate)) {
-                found = candidate;
-                ++candidates;
-            } else {
-                bootloaderPresent = readBootloaderStatus(bootStatus);
+            // 0x54 is reserved by the Roller Bootloader. Do not issue a read,
+            // because released legacy Bootloaders cannot complete it.
+            bootloaderPresent = probe(kBootloaderAddress);
+            if (bootloaderPresent) {
+                delay(5);
             }
             continue;
         }
@@ -196,17 +176,23 @@ UnitRollerIAPDevice UnitRollerIAP::detect()
     if (bootloaderPresent) {
         found.mode       = UnitRollerIAPMode::Bootloader;
         found.address    = kBootloaderAddress;
-        found.bootStatus = bootStatus;
+        found.bootStatus = 0;
     }
     return found;
 }
 
-bool UnitRollerIAP::waitForAddress(uint8_t address, uint32_t timeoutMs)
+bool UnitRollerIAP::waitForBootloader(uint32_t timeoutMs)
 {
+    // Released legacy Bootloaders acknowledge writes at 0x54 but cannot
+    // complete a slave-read transaction. Use the common ACK handshake for all
+    // Bootloader revisions so an attempted status read cannot wedge I2C.
     const uint32_t started = millis();
     do {
-        if (probe(address)) return true;
-        delay(50);
+        if (probe(kBootloaderAddress)) {
+            delay(5);
+            return true;
+        }
+        delay(20);
     } while (millis() - started < timeoutMs);
     return false;
 }
@@ -216,7 +202,7 @@ bool UnitRollerIAP::enterBootloader(uint8_t applicationAddress)
     restartWire();
     write8(applicationAddress, kJumpRegister, 1);
     holdBusLow(200);
-    if (waitForAddress(kBootloaderAddress, 5000)) return true;
+    if (waitForBootloader(5000)) return true;
 
     const uint8_t magic[4] = {0x55, 0xAA, 0x55, 0xAA};
     if (!write(applicationAddress, kLegacyScratchRegister, magic, sizeof(magic)) ||
@@ -224,13 +210,40 @@ bool UnitRollerIAP::enterBootloader(uint8_t applicationAddress)
         return false;
     }
     holdBusLow(200);
-    return waitForAddress(kBootloaderAddress, 10000);
+    return waitForBootloader(10000);
+}
+
+bool UnitRollerIAP::writePage(uint32_t address, const uint8_t *data, uint16_t length)
+{
+    packet_[0] = kWriteCommand;
+    packet_[1] = static_cast<uint8_t>(address >> 24);
+    packet_[2] = static_cast<uint8_t>(address >> 16);
+    packet_[3] = static_cast<uint8_t>(address >> 8);
+    packet_[4] = static_cast<uint8_t>(address);
+    packet_[5] = static_cast<uint8_t>(length >> 8);
+    packet_[6] = static_cast<uint8_t>(length);
+    packet_[7] = 0xFF;
+    memcpy(packet_ + 8, data, length);
+
+    for (uint8_t attempt = 0; attempt < kPageRetries; ++attempt) {
+        if (!rawWrite(kBootloaderAddress, packet_, static_cast<size_t>(length) + 8)) {
+            restartWire();
+            delay(20);
+            waitForBootloader(30000);
+            continue;
+        }
+        delay(20);
+        if (waitForBootloader(30000)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool UnitRollerIAP::writeFirmware(const uint8_t *image, uint32_t imageSize, UnitRollerIAPProgress progress,
                                   void *progressUser)
 {
-    if (image == nullptr || imageSize != kApplicationSize || !waitForAddress(kBootloaderAddress, 5000)) return false;
+    if (image == nullptr || imageSize != kApplicationSize) return false;
 
     uint32_t written = 0;
     if (progress != nullptr) progress(0, imageSize, progressUser);
@@ -238,37 +251,25 @@ bool UnitRollerIAP::writeFirmware(const uint8_t *image, uint32_t imageSize, Unit
         const uint16_t chunk =
             static_cast<uint16_t>((imageSize - written) > kPageSize ? kPageSize : (imageSize - written));
         const uint32_t target = kApplicationStart + written;
-        packet_[0]            = kWriteCommand;
-        packet_[1]            = static_cast<uint8_t>(target >> 24);
-        packet_[2]            = static_cast<uint8_t>(target >> 16);
-        packet_[3]            = static_cast<uint8_t>(target >> 8);
-        packet_[4]            = static_cast<uint8_t>(target);
-        packet_[5]            = static_cast<uint8_t>(chunk >> 8);
-        packet_[6]            = static_cast<uint8_t>(chunk);
-        packet_[7]            = 0xFF;
-        memcpy(packet_ + 8, image + written, chunk);
-
-        if (!waitForAddress(kBootloaderAddress, 30000) || !rawWrite(kBootloaderAddress, packet_, chunk + 8)) {
-            return false;
-        }
+        if (!writePage(target, image + written, chunk)) return false;
         written += chunk;
         if (progress != nullptr) progress(written, imageSize, progressUser);
-        delay(80);
     }
     return true;
 }
 
 bool UnitRollerIAP::startApplication()
 {
-    if (!waitForAddress(kBootloaderAddress, 30000)) return false;
+    if (!waitForBootloader(30000)) {
+        return false;
+    }
     const uint8_t command = kStartCommand;
     return rawWrite(kBootloaderAddress, &command, sizeof(command));
 }
 
 UnitRollerIAPResult UnitRollerIAP::update(const UnitRollerIAPDevice &device, UnitRollerIAPProduct product,
                                           uint8_t targetVersion, const uint8_t *image, uint32_t imageSize,
-                                          bool allowUnverifiedProduct, UnitRollerIAPProgress progress,
-                                          void *progressUser)
+                                          bool allowRiskyUpdate, UnitRollerIAPProgress progress, void *progressUser)
 {
     UnitRollerIAPResult result;
     if (wire_ == nullptr || image == nullptr || imageSize != kApplicationSize) {
@@ -284,19 +285,19 @@ UnitRollerIAPResult UnitRollerIAP::update(const UnitRollerIAPDevice &device, Uni
         return result;
     }
     if (device.mode == UnitRollerIAPMode::Application) {
-        if (device.productKnown && device.productId != static_cast<uint8_t>(product)) {
+        if (device.productKnown && device.productId != static_cast<uint8_t>(product) && !allowRiskyUpdate) {
             result.error = UnitRollerIAPError::ProductMismatch;
             return result;
         }
-        if (!device.productKnown && !allowUnverifiedProduct) {
+        if (!device.productKnown && !allowRiskyUpdate) {
             result.error = UnitRollerIAPError::ConfirmationRequired;
             return result;
         }
-        if (device.productKnown && device.firmwareVersion > targetVersion) {
+        if (device.productKnown && device.firmwareVersion > targetVersion && !allowRiskyUpdate) {
             result.error = UnitRollerIAPError::NewerVersion;
             return result;
         }
-        if (device.productKnown && device.firmwareVersion == targetVersion) {
+        if (device.productKnown && device.firmwareVersion == targetVersion && !allowRiskyUpdate) {
             result.error = UnitRollerIAPError::UpToDate;
             return result;
         }
@@ -305,11 +306,11 @@ UnitRollerIAPResult UnitRollerIAP::update(const UnitRollerIAPDevice &device, Uni
             return result;
         }
     } else if (device.mode == UnitRollerIAPMode::Bootloader) {
-        if (!allowUnverifiedProduct) {
+        if (!allowRiskyUpdate) {
             result.error = UnitRollerIAPError::ConfirmationRequired;
             return result;
         }
-        if (!waitForAddress(kBootloaderAddress, 3000)) {
+        if (!waitForBootloader(3000)) {
             result.error = UnitRollerIAPError::BootloaderLost;
             return result;
         }

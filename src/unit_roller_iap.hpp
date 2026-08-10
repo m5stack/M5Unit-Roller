@@ -80,10 +80,12 @@ public:
 
     /**
      * Write a complete application image and verify the resulting product and version.
-     * Set allowUnverifiedProduct only after the user confirms a legacy or recovery-mode product.
+     * Set allowRiskyUpdate only after the user explicitly confirms an unverified model,
+     * model mismatch,
+     * same-version reflash, downgrade, or Bootloader recovery.
      */
     UnitRollerIAPResult update(const UnitRollerIAPDevice &device, UnitRollerIAPProduct product, uint8_t targetVersion,
-                               const uint8_t *image, uint32_t imageSize, bool allowUnverifiedProduct = false,
+                               const uint8_t *image, uint32_t imageSize, bool allowRiskyUpdate = false,
                                UnitRollerIAPProgress progress = nullptr, void *progressUser = nullptr);
 
     static const char *errorText(UnitRollerIAPError error);
@@ -97,12 +99,11 @@ private:
     bool read8(uint8_t address, uint8_t reg, uint8_t &value);
     bool write(uint8_t address, uint8_t reg, const void *data, size_t length);
     bool write8(uint8_t address, uint8_t reg, uint8_t value);
-    bool rawRead8(uint8_t address, uint8_t &value);
     bool rawWrite(uint8_t address, const uint8_t *data, size_t length);
     bool readApplication(uint8_t address, UnitRollerIAPDevice &device);
-    bool readBootloaderStatus(uint8_t &status);
-    bool waitForAddress(uint8_t address, uint32_t timeoutMs);
+    bool waitForBootloader(uint32_t timeoutMs);
     bool enterBootloader(uint8_t applicationAddress);
+    bool writePage(uint32_t address, const uint8_t *data, uint16_t length);
     bool writeFirmware(const uint8_t *image, uint32_t imageSize, UnitRollerIAPProgress progress, void *progressUser);
     bool startApplication();
 

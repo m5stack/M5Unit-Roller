@@ -1,3 +1,8 @@
+/*
+ *SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ *SPDX-License-Identifier: MIT
+ */
 #include <Arduino.h>
 #include <Wire.h>
 #include <unit_roller_iap.hpp>
@@ -65,25 +70,26 @@ void setup()
         return;
     }
 
-    bool allowUnverified = false;
+    bool allowRiskyUpdate = false;
     if (device.mode == UnitRollerIAPMode::Application) {
         Serial.printf("Application found at 0x%02X, firmware V%u, communication ID 0x%02X.\n", device.address,
                       device.firmwareVersion, device.motorId);
         if (device.productKnown) {
             if (device.productId != static_cast<uint8_t>(kTargetProduct)) {
-                Serial.println("ERROR: Connected product is Roller485. Use the Roller485 updater example.");
-                return;
+                allowRiskyUpdate = true;
+                Serial.println("WARNING: Reported model is Roller485, but the selected image is RollerCAN.");
+                Serial.println("Continue only to recover hardware that was previously flashed with the wrong image.");
             }
             if (device.firmwareVersion == kTargetVersion) {
-                Serial.println("RollerCAN is already running the latest firmware V3. No update is needed.");
-                return;
+                allowRiskyUpdate = true;
+                Serial.println("WARNING: This will reflash the same firmware version.");
             }
             if (device.firmwareVersion > kTargetVersion) {
-                Serial.println("ERROR: Installed firmware is newer than this updater.");
-                return;
+                allowRiskyUpdate = true;
+                Serial.println("WARNING: This will downgrade the installed firmware.");
             }
         } else {
-            allowUnverified = true;
+            allowRiskyUpdate = true;
             Serial.println("WARNING: Legacy firmware has no reliable product ID.");
             if (device.motorId == UnitRollerIAP::kRollerCANDefaultId) {
                 Serial.println("The communication ID matches the RollerCAN factory default (0xA8).");
@@ -95,15 +101,15 @@ void setup()
             Serial.println("Check that the connected product is RollerCAN before continuing.");
         }
     } else {
-        allowUnverified = true;
-        Serial.printf("Bootloader recovery mode found at 0x%02X (status %u).\n", device.address, device.bootStatus);
+        allowRiskyUpdate = true;
+        Serial.printf("Bootloader recovery mode found at 0x%02X.\n", device.address);
         Serial.println("The Bootloader contains no product identity. Confirm the product is RollerCAN.");
     }
 
     if (!confirmUpdate()) return;
     Serial.println("Starting update. Do not disconnect power or the I2C cable.");
-    const UnitRollerIAPResult result =
-        updater.update(device, kTargetProduct, kTargetVersion, appHexData, appHexLength, allowUnverified, showProgress);
+    const UnitRollerIAPResult result = updater.update(device, kTargetProduct, kTargetVersion, appHexData, appHexLength,
+                                                      allowRiskyUpdate, showProgress);
     if (!result.ok()) {
         Serial.printf("UPDATE FAILED: %s\n", UnitRollerIAP::errorText(result.error));
         return;

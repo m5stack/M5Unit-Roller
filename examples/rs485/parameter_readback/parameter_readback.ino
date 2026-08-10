@@ -1,3 +1,8 @@
+/*
+ *SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ *SPDX-License-Identifier: MIT
+ */
 #include <Arduino.h>
 #include <unit_roller485.hpp>
 
