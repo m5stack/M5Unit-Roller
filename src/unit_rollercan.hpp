@@ -2959,6 +2959,16 @@ public:
     int8_t readBPS(uint8_t id, uint8_t addr);
 
 private:
+    void clearPendingResponses();
+    int32_t getScaledMotorParameter(uint8_t id, uint16_t parameterId, int32_t divisor);
+    int32_t readScaledMotorParameter(uint8_t id, uint8_t addr, uint16_t parameterId, int32_t divisor);
+    int32_t readScaledMotorRawParameter(uint8_t id, uint8_t addr, uint8_t reg, int32_t divisor);
+    int8_t receiveStatusResponse(uint8_t id);
+    int8_t receiveCommandResponse(uint8_t id, uint8_t command, uint8_t expectedCommandParameter, uint8_t expectedHostId,
+                                  uint8_t *response = nullptr);
+    int8_t receiveParameterResponse(uint8_t id, uint8_t command, uint16_t parameterId, int32_t *value);
+    int8_t requestParameterValue(uint8_t id, uint8_t command, uint8_t address, uint16_t parameterId, int32_t *value);
+    int8_t requestRawParameterValue(uint8_t id, uint8_t address, uint8_t reg, int32_t *value);
     int8_t transactCommand(uint8_t id, uint8_t command, uint8_t commandParameter, const uint8_t *request,
                            uint8_t *response);
     int8_t readFunctionValue(uint8_t id, uint16_t functionIndex, int32_t *value);

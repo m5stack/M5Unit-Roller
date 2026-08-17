@@ -41,7 +41,7 @@ void setup()
 
     delay(3000);
     // position
-    rollercan.setMode(motorID, ROLLER_MODE_SPEED);
+    rollercan.setMode(motorID, ROLLER_MODE_POSITION);
     rollercan.setPositionCurrent(motorID, 1200);
     Serial.printf("PositionCurrent:%d\r\n", rollercan.getPositionCurrent(motorID));
     rollercan.setOutput(motorID, true);

@@ -41,6 +41,7 @@ void UnitRollerCAN::beginCAN(unsigned long baud, int8_t rxPin, int8_t txPin)
 int8_t UnitRollerCAN::setRemoveProtection(uint8_t id, bool en)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     uint8_t cmd_id;
     if (en) {
@@ -52,7 +53,7 @@ int8_t UnitRollerCAN::setRemoveProtection(uint8_t id, bool en)
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t result = receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
     return result;
 }
@@ -60,12 +61,13 @@ int8_t UnitRollerCAN::setRemoveProtection(uint8_t id, bool en)
 int8_t UnitRollerCAN::setUnprotect(uint8_t id)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     if (!sendData(id, ROLLERCAN_UNPROTECT, 0, canData)) {
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t result = receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
     return result;
 }
@@ -73,12 +75,13 @@ int8_t UnitRollerCAN::setUnprotect(uint8_t id)
 int8_t UnitRollerCAN::setSaveFlash(uint8_t id)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     if (!sendData(id, ROLLERCAN_FLASH, 0, canData)) {
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t result = receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
     return result;
 }
@@ -86,12 +89,17 @@ int8_t UnitRollerCAN::setSaveFlash(uint8_t id)
 int8_t UnitRollerCAN::setBPS(uint8_t id, roller_bps_t bps)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     if (!sendData(id, ROLLERCAN_BAUDRATE, bps, canData)) {
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t result = receiveData();
+    int8_t result = receiveCommandResponse(id, ROLLERCAN_BAUDRATE, bps, 0);
+    if (result != ROLLER_WRITE_SUCCESS) {
+        releaseMutex();
+        return result;
+    }
     ESP_ERROR_CHECK(twai_stop());
     ESP_ERROR_CHECK(twai_driver_uninstall());
     // Map the new baud rate to the timing config
@@ -116,6 +124,7 @@ int8_t UnitRollerCAN::setBPS(uint8_t id, roller_bps_t bps)
 int8_t UnitRollerCAN::setOutput(uint8_t id, bool en)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     uint8_t cmd_id;
     if (en) {
@@ -127,8 +136,11 @@ int8_t UnitRollerCAN::setOutput(uint8_t id, bool en)
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
     if (en != getOutput(id)) {
         return ROLLER_WRITE_FAILED;
     }
@@ -143,6 +155,7 @@ int8_t UnitRollerCAN::getOutput(uint8_t id)
 int8_t UnitRollerCAN::setMode(uint8_t id, roller_mode_t mode)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     canData[0] = (ROLLERCAN_MODE & 0xFF);
     canData[1] = (ROLLERCAN_MODE >> 8) & 0xFF;
@@ -151,8 +164,11 @@ int8_t UnitRollerCAN::setMode(uint8_t id, roller_mode_t mode)
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
     if (mode != getMode(id)) {
         return ROLLER_WRITE_FAILED;
     }
@@ -167,14 +183,15 @@ int8_t UnitRollerCAN::getMode(uint8_t id)
 int8_t UnitRollerCAN::getSysStatus(uint8_t id)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
 
     if (!sendData(id, ROLLERCAN_STATUS_CMD, 0, canData)) {
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t result = receiveData();
-    if (result) {
+    int8_t result = receiveStatusResponse(id);
+    if (result == ROLLER_WRITE_SUCCESS) {
         releaseMutex();
         return recv_status;
     }
@@ -185,13 +202,14 @@ int8_t UnitRollerCAN::getSysStatus(uint8_t id)
 int8_t UnitRollerCAN::getError(uint8_t id)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     if (!sendData(id, ROLLERCAN_STATUS_CMD, 0, canData)) {
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t result = receiveData();
-    if (result) {
+    int8_t result = receiveStatusResponse(id);
+    if (result == ROLLER_WRITE_SUCCESS) {
         releaseMutex();
         return recv_faultInfo;
     }
@@ -202,20 +220,36 @@ int8_t UnitRollerCAN::getError(uint8_t id)
 int8_t UnitRollerCAN::setMotorID(uint8_t id, uint8_t newId)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     if (!sendData(id, ROLLERCAN_CMD_ID, newId, canData)) {
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    receiveData();
+    unsigned long started = millis();
+    int8_t result         = ROLLER_SERIAL_TIMEOUT;
+    while (millis() - started < 300) {
+        twai_message_t frame = {};
+        if (twai_receive(&frame, pdMS_TO_TICKS(10)) != ESP_OK) {
+            continue;
+        }
+        uint8_t command     = static_cast<uint8_t>((frame.identifier >> 24) & 0x1F);
+        uint8_t responseId  = static_cast<uint8_t>(frame.identifier >> 8);
+        uint8_t broadcastId = static_cast<uint8_t>(frame.identifier);
+        if (frame.extd && !frame.rtr && frame.data_length_code == 8 && command == 0 && responseId == newId &&
+            broadcastId == 0xFE) {
+            result = ROLLER_WRITE_SUCCESS;
+            break;
+        }
+    }
     releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return result;
 }
 
 int8_t UnitRollerCAN::setRGBMode(uint8_t id, roller_rgb_t mode)
 {
     int8_t result = setMotorParameter(id, ROLLERCAN_RGB_MODE, mode);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (mode != getRGBMode(id)) {
@@ -227,6 +261,7 @@ int8_t UnitRollerCAN::setRGBMode(uint8_t id, roller_rgb_t mode)
 int8_t UnitRollerCAN::setRGB(uint8_t id, int32_t color)
 {
     acquireMutex();
+    clearPendingResponses();
     uint8_t rgbValues[3];
     memset(canData, 0, sizeof(canData));
     rgbValues[0] = (color >> 11) & 0x1F;  // R (5 bits)
@@ -243,7 +278,7 @@ int8_t UnitRollerCAN::setRGB(uint8_t id, int32_t color)
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t result = receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
     if (result != ROLLER_WRITE_SUCCESS) {
         return result;
@@ -254,7 +289,7 @@ int8_t UnitRollerCAN::setRGB(uint8_t id, int32_t color)
 int8_t UnitRollerCAN::setRGBBrightness(uint8_t id, uint8_t brightness)
 {
     int8_t result = setMotorParameter(id, ROLLERCAN_RGB_BRIGHTNESS, brightness);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (brightness != getRGBBrightness(id)) {
@@ -269,7 +304,7 @@ int8_t UnitRollerCAN::setSpeed(uint8_t id, int32_t speed)
     static const int32_t max = 21000000;
     speed                    = constrain(speed, min, max);
     int8_t result            = setMotorParameter(id, ROLLERCAN_SPEED, speed * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speed != getSpeed(id)) {
@@ -280,7 +315,7 @@ int8_t UnitRollerCAN::setSpeed(uint8_t id, int32_t speed)
 
 int32_t UnitRollerCAN::getSpeed(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_SPEED) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_SPEED, 100);
 }
 
 int8_t UnitRollerCAN::setSpeedCurrent(uint8_t id, int32_t speedCurrent)
@@ -289,7 +324,7 @@ int8_t UnitRollerCAN::setSpeedCurrent(uint8_t id, int32_t speedCurrent)
     static const int32_t max = 1200;
     speedCurrent             = constrain(speedCurrent, min, max);
     int8_t result            = setMotorParameter(id, ROLLERCAN_SPEED_CURRENT, speedCurrent * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedCurrent != getSpeedCurrent(id)) {
@@ -300,13 +335,13 @@ int8_t UnitRollerCAN::setSpeedCurrent(uint8_t id, int32_t speedCurrent)
 
 int32_t UnitRollerCAN::getSpeedCurrent(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_SPEED_CURRENT) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_SPEED_CURRENT, 100);
 }
 
 int8_t UnitRollerCAN::setSpeedKp(uint8_t id, uint32_t speedKp)
 {
     int8_t result = setMotorPID(id, ROLLERCAN_SPEED_KP, speedKp);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKp != getSpeedKp(id)) {
@@ -323,7 +358,7 @@ uint32_t UnitRollerCAN::getSpeedKp(uint8_t id)
 int8_t UnitRollerCAN::setSpeedKi(uint8_t id, uint32_t speedKi)
 {
     int8_t result = setMotorPID(id, ROLLERCAN_SPEED_KI, speedKi);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKi != getSpeedKi(id)) {
@@ -340,7 +375,7 @@ uint32_t UnitRollerCAN::getSpeedKi(uint8_t id)
 int8_t UnitRollerCAN::setSpeedKd(uint8_t id, uint32_t speedKd)
 {
     int8_t result = setMotorPID(id, ROLLERCAN_SPEED_KD, speedKd);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKd != getSpeedKd(id)) {
@@ -360,7 +395,7 @@ int8_t UnitRollerCAN::setPosition(uint8_t id, int32_t position)
     static const int32_t max = 21000000;
     position                 = constrain(position, min, max);
     int8_t result            = setMotorParameter(id, ROLLERCAN_POSITION, position * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (position != getPosition(id)) {
@@ -371,7 +406,7 @@ int8_t UnitRollerCAN::setPosition(uint8_t id, int32_t position)
 
 int32_t UnitRollerCAN::getPosition(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_POSITION) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_POSITION, 100);
 }
 
 int8_t UnitRollerCAN::setPositionCurrent(uint8_t id, int32_t positionCurrent)
@@ -380,7 +415,7 @@ int8_t UnitRollerCAN::setPositionCurrent(uint8_t id, int32_t positionCurrent)
     static const int32_t max = 1200;
     positionCurrent          = constrain(positionCurrent, min, max);
     int8_t result            = setMotorParameter(id, ROLLERCAN_POSITION_CURRENT, positionCurrent * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionCurrent != getPositionCurrent(id)) {
@@ -391,13 +426,13 @@ int8_t UnitRollerCAN::setPositionCurrent(uint8_t id, int32_t positionCurrent)
 
 int32_t UnitRollerCAN::getPositionCurrent(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_POSITION_CURRENT) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_POSITION_CURRENT, 100);
 }
 
 int8_t UnitRollerCAN::setPositionKp(uint8_t id, uint32_t opsitionKp)
 {
     int8_t result = setMotorPID(id, ROLLERCAN_POSITION_KP, opsitionKp);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (opsitionKp != getPositionKp(id)) {
@@ -414,7 +449,7 @@ uint32_t UnitRollerCAN::getPositionKp(uint8_t id)
 int8_t UnitRollerCAN::setPositionKi(uint8_t id, uint32_t positionKi)
 {
     int8_t result = setMotorPID(id, ROLLERCAN_POSITION_KI, positionKi);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKi != getPositionKi(id)) {
@@ -431,7 +466,7 @@ uint32_t UnitRollerCAN::getPositionKi(uint8_t id)
 int8_t UnitRollerCAN::setPositionKd(uint8_t id, uint32_t positionKd)
 {
     int8_t result = setMotorPID(id, ROLLERCAN_POSITION_KD, positionKd);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKd != getPositionKd(id)) {
@@ -451,7 +486,7 @@ int8_t UnitRollerCAN::setCurrent(uint8_t id, int32_t current)
     static const int32_t max = 1200;
     current                  = constrain(current, min, max);
     int8_t result            = setMotorParameter(id, ROLLERCAN_CURRENT, current * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (current != getCurrent(id)) {
@@ -462,7 +497,7 @@ int8_t UnitRollerCAN::setCurrent(uint8_t id, int32_t current)
 
 int32_t UnitRollerCAN::getCurrent(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_CURRENT) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_CURRENT, 100);
 }
 
 int8_t UnitRollerCAN::setEncoder(uint8_t id, int32_t encoder)
@@ -471,7 +506,7 @@ int8_t UnitRollerCAN::setEncoder(uint8_t id, int32_t encoder)
     static const int32_t max = 21000000;
     encoder                  = constrain(encoder, min, max);
     int8_t result            = setMotorParameter(id, ROLLERCAN_ENCODER, encoder);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (encoder != getEncoder(id)) {
@@ -487,22 +522,22 @@ int32_t UnitRollerCAN::getEncoder(uint8_t id)
 
 int32_t UnitRollerCAN::getActualSpeed(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_ACTUAL_SPEED) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_ACTUAL_SPEED, 100);
 }
 
 int32_t UnitRollerCAN::getActualPosition(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_ACTUAL_POSITION) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_ACTUAL_POSITION, 100);
 }
 
 int32_t UnitRollerCAN::getActualCurrent(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_ACTUAL_CURRENT) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_ACTUAL_CURRENT, 100);
 }
 
 int32_t UnitRollerCAN::getActualVin(uint8_t id)
 {
-    return getMotorParameter(id, ROLLERCAN_VIN) / 100.0f;
+    return getScaledMotorParameter(id, ROLLERCAN_VIN, 100);
 }
 
 int32_t UnitRollerCAN::getActualTemp(uint8_t id)
@@ -517,11 +552,14 @@ int8_t UnitRollerCAN::getRGBMode(uint8_t id)
 
 int8_t UnitRollerCAN::getRGB(uint8_t id, uint8_t *rgbValues)
 {
-    int32_t returnValue = getMotorParameter(id, ROLLERCAN_RGB_COLOR);
-    rgbValues[0]        = readData[6];  // R value
-    rgbValues[1]        = readData[5];  // G value
-    rgbValues[2]        = readData[4];  // B value
-    return returnValue;
+    if (rgbValues == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    int8_t result = getMotorParameter(id, ROLLERCAN_RGB_COLOR);
+    rgbValues[0]  = readData[6];
+    rgbValues[1]  = readData[5];
+    rgbValues[2]  = readData[4];
+    return result;
 }
 
 int8_t UnitRollerCAN::getRGBBrightness(uint8_t id)
@@ -542,7 +580,7 @@ int8_t UnitRollerCAN::writeSaveFlash(uint8_t id, uint8_t addr, bool en)
 int8_t UnitRollerCAN::writeOutput(uint8_t id, uint8_t addr, bool en)
 {
     int8_t result = writeMotorParameter(id, addr, ROLLERCAN_SWITCH, en);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (en != readOutput(id, addr)) {
@@ -559,7 +597,7 @@ int8_t UnitRollerCAN::readOutput(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeMode(uint8_t id, uint8_t addr, roller_mode_t mode)
 {
     int8_t result = writeMotorParameter(id, addr, ROLLERCAN_MODE, mode);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (mode != readMode(id, addr)) {
@@ -576,7 +614,7 @@ int8_t UnitRollerCAN::readMode(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeSpeed(uint8_t id, uint8_t addr, int32_t speed)
 {
     int8_t result = writeMotorParameter(id, addr, ROLLERCAN_SPEED, speed * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speed != readSpeed(id, addr)) {
@@ -587,7 +625,7 @@ int8_t UnitRollerCAN::writeSpeed(uint8_t id, uint8_t addr, int32_t speed)
 
 int32_t UnitRollerCAN::readSpeed(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_SPEED) / 100.0f;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_SPEED, 100);
 }
 
 int8_t UnitRollerCAN::writeSpeedCurrent(uint8_t id, uint8_t addr, int32_t speedCurrent)
@@ -596,7 +634,7 @@ int8_t UnitRollerCAN::writeSpeedCurrent(uint8_t id, uint8_t addr, int32_t speedC
     static const int32_t max = 1200;
     speedCurrent             = constrain(speedCurrent, min, max);
     int8_t result            = writeMotorParameter(id, addr, ROLLERCAN_SPEED_CURRENT, speedCurrent * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedCurrent != readSpeedCurrent(id, addr)) {
@@ -607,13 +645,13 @@ int8_t UnitRollerCAN::writeSpeedCurrent(uint8_t id, uint8_t addr, int32_t speedC
 
 int32_t UnitRollerCAN::readSpeedCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_SPEED_CURRENT);
+    return readScaledMotorParameter(id, addr, ROLLERCAN_SPEED_CURRENT, 100);
 }
 
 int8_t UnitRollerCAN::writeSpeedKp(uint8_t id, uint8_t addr, uint32_t speedKp)
 {
     int8_t result = writeMotorPID(id, addr, ROLLERCAN_SPEED_KP, speedKp);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKp != readSpeedKp(id, addr)) {
@@ -630,7 +668,7 @@ uint32_t UnitRollerCAN::readSpeedKp(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeSpeedKi(uint8_t id, uint8_t addr, uint32_t speedKi)
 {
     int8_t result = writeMotorPID(id, addr, ROLLERCAN_SPEED_KI, speedKi);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKi != readSpeedKi(id, addr)) {
@@ -647,7 +685,7 @@ uint32_t UnitRollerCAN::readSpeedKi(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeSpeedKd(uint8_t id, uint8_t addr, uint32_t speedKd)
 {
     int8_t result = writeMotorPID(id, addr, ROLLERCAN_SPEED_KD, speedKd);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKd != readSpeedKd(id, addr)) {
@@ -664,7 +702,7 @@ uint32_t UnitRollerCAN::readSpeedKd(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writePosition(uint8_t id, uint8_t addr, int32_t position)
 {
     int8_t result = writeMotorParameter(id, addr, ROLLERCAN_POSITION, position * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (position != readPosition(id, addr)) {
@@ -675,7 +713,7 @@ int8_t UnitRollerCAN::writePosition(uint8_t id, uint8_t addr, int32_t position)
 
 int32_t UnitRollerCAN::readPosition(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_POSITION) / 100.0f;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_POSITION, 100);
 }
 
 int8_t UnitRollerCAN::writePositionCurrent(uint8_t id, uint8_t addr, int32_t positionCurrent)
@@ -684,7 +722,7 @@ int8_t UnitRollerCAN::writePositionCurrent(uint8_t id, uint8_t addr, int32_t pos
     static const int32_t max = 1200;
     positionCurrent          = constrain(positionCurrent, min, max);
     int8_t result            = writeMotorParameter(id, addr, ROLLERCAN_POSITION_CURRENT, positionCurrent * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionCurrent != readPositionCurrent(id, addr)) {
@@ -695,13 +733,13 @@ int8_t UnitRollerCAN::writePositionCurrent(uint8_t id, uint8_t addr, int32_t pos
 
 int32_t UnitRollerCAN::readPositionCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_POSITION_CURRENT) / 100.0f;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_POSITION_CURRENT, 100);
 }
 
 int8_t UnitRollerCAN::writePositionKp(uint8_t id, uint8_t addr, uint32_t positionKp)
 {
     int8_t result = writeMotorPID(id, addr, ROLLERCAN_POSITION_KP, positionKp);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKp != readPositionKp(id, addr)) {
@@ -718,7 +756,7 @@ uint32_t UnitRollerCAN::readPositionKp(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writePositionKi(uint8_t id, uint8_t addr, uint32_t positionKi)
 {
     int8_t result = writeMotorPID(id, addr, ROLLERCAN_POSITION_KI, positionKi);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKi != readPositionKi(id, addr)) {
@@ -735,7 +773,7 @@ uint32_t UnitRollerCAN::readPositionKi(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writePositionKd(uint8_t id, uint8_t addr, uint32_t positionKd)
 {
     int8_t result = writeMotorPID(id, addr, ROLLERCAN_POSITION_KD, positionKd);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKd != readPositionKd(id, addr)) {
@@ -755,7 +793,7 @@ int8_t UnitRollerCAN::writeCurrent(uint8_t id, uint8_t addr, int32_t current)
     static const int32_t max = 1200;
     current                  = constrain(current, min, max);
     int8_t result            = writeMotorParameter(id, addr, ROLLERCAN_CURRENT, current * 100);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (current != readCurrent(id, addr)) {
@@ -766,13 +804,13 @@ int8_t UnitRollerCAN::writeCurrent(uint8_t id, uint8_t addr, int32_t current)
 
 int32_t UnitRollerCAN::readCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_CURRENT) / 100.0f;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_CURRENT, 100);
 }
 
 int8_t UnitRollerCAN::writeEncoder(uint8_t id, uint8_t addr, int32_t encoder)
 {
     int8_t result = writeMotorParameter(id, addr, ROLLERCAN_ENCODER, encoder);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (encoder != readEncoder(id, addr)) {
@@ -788,22 +826,22 @@ int32_t UnitRollerCAN::readEncoder(uint8_t id, uint8_t addr)
 
 int32_t UnitRollerCAN::readActualSpeed(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_ACTUAL_SPEED) / 100;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_ACTUAL_SPEED, 100);
 }
 
 int32_t UnitRollerCAN::readActualPosition(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_ACTUAL_POSITION) / 100;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_ACTUAL_POSITION, 100);
 }
 
 int32_t UnitRollerCAN::readActualCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_ACTUAL_CURRENT) / 100;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_ACTUAL_CURRENT, 100);
 }
 
 int32_t UnitRollerCAN::readActualVin(uint8_t id, uint8_t addr)
 {
-    return readMotorParameter(id, addr, ROLLERCAN_VIN) / 100;
+    return readScaledMotorParameter(id, addr, ROLLERCAN_VIN, 100);
 }
 
 int32_t UnitRollerCAN::readActualTemp(uint8_t id, uint8_t addr)
@@ -819,7 +857,7 @@ int8_t UnitRollerCAN::readRGBMode(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRGBMode(uint8_t id, uint8_t addr, roller_rgb_t mode)
 {
     int8_t result = writeMotorParameter(id, addr, ROLLERCAN_RGB_MODE, mode);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (mode != readRGBMode(id, addr)) {
@@ -830,16 +868,21 @@ int8_t UnitRollerCAN::writeRGBMode(uint8_t id, uint8_t addr, roller_rgb_t mode)
 
 int8_t UnitRollerCAN::readRGB(uint8_t id, uint8_t addr, uint8_t *rgbValues)
 {
-    int32_t returnValue = readMotorParameter(id, addr, ROLLERCAN_RGB_COLOR);
-    rgbValues[0]        = readData[6];  // R value
-    rgbValues[1]        = readData[5];  // G value
-    rgbValues[2]        = readData[4];  // B value
-    return returnValue;
+    if (rgbValues == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    int32_t value = readMotorParameter(id, addr, ROLLERCAN_RGB_COLOR);
+    int8_t result = value < 0 ? static_cast<int8_t>(value) : ROLLER_WRITE_SUCCESS;
+    rgbValues[0]  = static_cast<uint8_t>(value >> 16);
+    rgbValues[1]  = static_cast<uint8_t>(value >> 8);
+    rgbValues[2]  = static_cast<uint8_t>(value);
+    return result;
 }
 
 int8_t UnitRollerCAN::writeRGB(uint8_t id, uint8_t addr, int32_t color)
 {
     acquireMutex();
+    clearPendingResponses();
     uint8_t rgbValues[3];
     memset(canData, 0, sizeof(canData));
     canData[0]   = (ROLLERCAN_RGB_COLOR & 0xFF);
@@ -855,8 +898,11 @@ int8_t UnitRollerCAN::writeRGB(uint8_t id, uint8_t addr, int32_t color)
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
     readRGB(id, addr, rgbValues);
     int32_t rgbInt = ((rgbValues[0] << 16) | (rgbValues[1] << 8) | rgbValues[2]);
     if (color != rgbInt) {
@@ -875,7 +921,7 @@ int8_t UnitRollerCAN::readRGBBrightness(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRGBBrightness(uint8_t id, uint8_t addr, uint8_t brightness)
 {
     int8_t result = writeMotorParameter(id, addr, ROLLERCAN_RGB_BRIGHTNESS, brightness);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (brightness != readRGBBrightness(id, addr)) {
@@ -892,7 +938,7 @@ int8_t UnitRollerCAN::readRawOutput(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawOutput(uint8_t id, uint8_t addr, bool en)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_OUTPUT_REG, 1, 1, en);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (en != readRawOutput(id, addr)) {
@@ -909,7 +955,7 @@ int8_t UnitRollerCAN::readRawMode(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawMode(uint8_t id, uint8_t addr, roller_mode_t mode)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_MODE_REG, 1, 1, mode);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (mode != readRawMode(id, addr)) {
@@ -920,13 +966,13 @@ int8_t UnitRollerCAN::writeRawMode(uint8_t id, uint8_t addr, roller_mode_t mode)
 
 int32_t UnitRollerCAN::readRawSpeed(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_SPEED_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_SPEED_REG, 100);
 }
 
 int8_t UnitRollerCAN::writeRawSpeed(uint8_t id, uint8_t addr, int32_t speed)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_SPEED_REG, 1, 4, speed * 100);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speed != readRawSpeed(id, addr)) {
@@ -937,13 +983,13 @@ int8_t UnitRollerCAN::writeRawSpeed(uint8_t id, uint8_t addr, int32_t speed)
 
 int32_t UnitRollerCAN::readRawSpeedCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_SPEED_MAX_CURRENT_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_SPEED_MAX_CURRENT_REG, 100);
 }
 
 int8_t UnitRollerCAN::writeRawSpeedCurrent(uint8_t id, uint8_t addr, int32_t speedCurrent)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_SPEED_MAX_CURRENT_REG, 1, 4, speedCurrent * 100);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedCurrent != readRawSpeedCurrent(id, addr)) {
@@ -960,7 +1006,7 @@ uint32_t UnitRollerCAN::readRawSpeedKp(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawSpeedKp(uint8_t id, uint8_t addr, uint32_t speedKp)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_SPEED_PID_REG, 1, 4, speedKp);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKp != readRawSpeedKp(id, addr)) {
@@ -977,7 +1023,7 @@ uint32_t UnitRollerCAN::readRawSpeedKi(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawSpeedKi(uint8_t id, uint8_t addr, uint32_t speedKi)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_SPEED_PID_REG + 4, 1, 4, speedKi);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKi != readRawSpeedKi(id, addr)) {
@@ -994,7 +1040,7 @@ uint32_t UnitRollerCAN::readRawSpeedKd(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawSpeedKd(uint8_t id, uint8_t addr, uint32_t speedKd)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_SPEED_PID_REG + 8, 1, 4, speedKd);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (speedKd != readRawSpeedKd(id, addr)) {
@@ -1005,13 +1051,13 @@ int8_t UnitRollerCAN::writeRawSpeedKd(uint8_t id, uint8_t addr, uint32_t speedKd
 
 int32_t UnitRollerCAN::readRawPosition(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_POS_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_POS_REG, 100);
 }
 
 int8_t UnitRollerCAN::writeRawPosition(uint8_t id, uint8_t addr, int32_t position)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_POS_REG, 1, 4, position * 100);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (position != readRawPosition(id, addr)) {
@@ -1022,13 +1068,13 @@ int8_t UnitRollerCAN::writeRawPosition(uint8_t id, uint8_t addr, int32_t positio
 
 int32_t UnitRollerCAN::readRawPositionCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_POS_MAX_CURRENT_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_POS_MAX_CURRENT_REG, 100);
 }
 
 int8_t UnitRollerCAN::writeRawPositionCurrent(uint8_t id, uint8_t addr, int32_t positionCurrent)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_POS_MAX_CURRENT_REG, 1, 4, positionCurrent * 100);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionCurrent != readRawPositionCurrent(id, addr)) {
@@ -1045,7 +1091,7 @@ uint32_t UnitRollerCAN::readRawPositionKp(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawPositionKp(uint8_t id, uint8_t addr, uint32_t positionKp)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_POS_PID_REG, 1, 4, positionKp);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKp != readRawPositionKp(id, addr)) {
@@ -1062,7 +1108,7 @@ uint32_t UnitRollerCAN::readRawPositionKi(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawPositionKi(uint8_t id, uint8_t addr, uint32_t positionKi)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_POS_PID_REG + 4, 1, 4, positionKi);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKi != readRawPositionKi(id, addr)) {
@@ -1079,7 +1125,7 @@ uint32_t UnitRollerCAN::readRawPositionKd(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawPositionKd(uint8_t id, uint8_t addr, uint32_t positionKd)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_POS_PID_REG + 8, 1, 4, positionKd);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (positionKd != readRawPositionKd(id, addr)) {
@@ -1090,13 +1136,13 @@ int8_t UnitRollerCAN::writeRawPositionKd(uint8_t id, uint8_t addr, uint32_t posi
 
 int32_t UnitRollerCAN::readRawCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_CURRENT_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_CURRENT_REG, 100);
 }
 
 int8_t UnitRollerCAN::writeRawCurrent(uint8_t id, uint8_t addr, int32_t current)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_CURRENT_REG, 1, 4, current * 100);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (current != readRawCurrent(id, addr)) {
@@ -1113,7 +1159,7 @@ int32_t UnitRollerCAN::readRawEncoder(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawEncoder(uint8_t id, uint8_t addr, int32_t encoder)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_DIAL_COUNTER_REG, 1, 4, encoder);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (encoder != readRawEncoder(id, addr)) {
@@ -1125,7 +1171,7 @@ int8_t UnitRollerCAN::writeRawEncoder(uint8_t id, uint8_t addr, int32_t encoder)
 int8_t UnitRollerCAN::writeRawFlash(uint8_t id, uint8_t addr, bool en)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_SAVE_FLASH_REG, 1, 1, en);
-    if (!result) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     return ROLLER_WRITE_SUCCESS;
@@ -1133,22 +1179,22 @@ int8_t UnitRollerCAN::writeRawFlash(uint8_t id, uint8_t addr, bool en)
 
 int32_t UnitRollerCAN::readRawActualSpeed(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_SPEED_READBACK_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_SPEED_READBACK_REG, 100);
 }
 
 int32_t UnitRollerCAN::readRawActualPosition(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_POS_READBACK_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_POS_READBACK_REG, 100);
 }
 
 int32_t UnitRollerCAN::readRawActualCurrent(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_CURRENT_READBACK_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_CURRENT_READBACK_REG, 100);
 }
 
 int32_t UnitRollerCAN::readRawActualVin(uint8_t id, uint8_t addr)
 {
-    return readMotorRawParameter(id, addr, I2C_VIN_REG) / 100.0f;
+    return readScaledMotorRawParameter(id, addr, I2C_VIN_REG, 100);
 }
 
 int32_t UnitRollerCAN::readRawActualTemp(uint8_t id, uint8_t addr)
@@ -1168,7 +1214,7 @@ int8_t UnitRollerCAN::readRawRGBMode(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawRGBMode(uint8_t id, uint8_t addr, roller_rgb_t mode)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_RGB_REG + 3, 1, 1, mode);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (mode != readRawRGBMode(id, addr)) {
@@ -1179,17 +1225,21 @@ int8_t UnitRollerCAN::writeRawRGBMode(uint8_t id, uint8_t addr, roller_rgb_t mod
 
 int8_t UnitRollerCAN::readRawRGB(uint8_t id, uint8_t addr, uint8_t *rgbValues)
 {
-    int32_t returnValue = readMotorRawParameter(id, addr, I2C_RGB_REG);
-    rgbValues[0]        = readData[2];  // R value
-    rgbValues[1]        = readData[1];  // G value
-    rgbValues[2]        = readData[0];  // B value
-
-    return returnValue;
+    if (rgbValues == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+    int32_t value = readMotorRawParameter(id, addr, I2C_RGB_REG);
+    int8_t result = value < 0 ? static_cast<int8_t>(value) : ROLLER_WRITE_SUCCESS;
+    rgbValues[0]  = readData[2];  // R value
+    rgbValues[1]  = readData[1];  // G value
+    rgbValues[2]  = readData[0];  // B value
+    return result;
 }
 
 int8_t UnitRollerCAN::writeRawRGB(uint8_t id, uint8_t addr, int32_t color)
 {
     acquireMutex();
+    clearPendingResponses();
     uint8_t rgbValues[3];
     memset(canData, 0, sizeof(canData));
     rgbValues[0] = (color >> 11) & 0x1F;  // R (5 bits)
@@ -1206,8 +1256,11 @@ int8_t UnitRollerCAN::writeRawRGB(uint8_t id, uint8_t addr, int32_t color)
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveCommandResponse(id, ROLLERCAN_WRITE_I2C_RAW_CMD, static_cast<uint8_t>(addr | 0x81), 0);
     releaseMutex();
+    if (result != ROLLER_WRITE_SUCCESS) {
+        return result;
+    }
     readRawRGB(id, addr, rgbValues);
     int32_t rgbInt = ((rgbValues[0] << 16) | (rgbValues[1] << 8) | rgbValues[2]);
     if (color != rgbInt) {
@@ -1226,7 +1279,7 @@ int8_t UnitRollerCAN::readRawRGBBrightness(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawRGBBrightness(uint8_t id, uint8_t addr, uint8_t brightness)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_RGB_BRIGHTNESS_REG, 1, 1, brightness);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (brightness != readRawRGBBrightness(id, addr)) {
@@ -1248,7 +1301,7 @@ uint8_t UnitRollerCAN::readRawI2CAddress(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeRawI2CAddress(uint8_t id, uint8_t addr, uint8_t newAddr)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_ADDRESS_REG, 1, 1, newAddr);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (newAddr != readRawI2CAddress(id, newAddr)) {
@@ -1260,7 +1313,7 @@ int8_t UnitRollerCAN::writeRawI2CAddress(uint8_t id, uint8_t addr, uint8_t newAd
 int8_t UnitRollerCAN::writeResetStallProtect(uint8_t id, uint8_t addr, bool en)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_RESET_STALLED_PROTECT_REG, 1, 1, en);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     return ROLLER_WRITE_SUCCESS;
@@ -1274,7 +1327,7 @@ int8_t UnitRollerCAN::readStallProtect(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writePosRangeProtect(uint8_t id, uint8_t addr, bool en)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_POS_RANGE_PROTECT_REG, 1, 1, en);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     return ROLLER_WRITE_SUCCESS;
@@ -1283,7 +1336,7 @@ int8_t UnitRollerCAN::writePosRangeProtect(uint8_t id, uint8_t addr, bool en)
 int8_t UnitRollerCAN::writeStallProtect(uint8_t id, uint8_t addr, bool en)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_STALL_PROTECTION_REG, 1, 1, en);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (en != readStallProtect(id, addr)) {
@@ -1300,7 +1353,7 @@ int8_t UnitRollerCAN::readButton(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeButton(uint8_t id, uint8_t addr, bool en)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_KEY_SWTICH_MODE_REG, 1, 1, en);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (en != readButton(id, addr)) {
@@ -1328,7 +1381,7 @@ uint8_t UnitRollerCAN::readMotorID(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeMotorID(uint8_t id, uint8_t addr, uint8_t motorId)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_ID_REG, 1, 1, motorId);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (motorId != readMotorID(id, addr)) {
@@ -1345,7 +1398,7 @@ int8_t UnitRollerCAN::readBPS(uint8_t id, uint8_t addr)
 int8_t UnitRollerCAN::writeBPS(uint8_t id, uint8_t addr, roller_bps_t bps)
 {
     int8_t result = writeMotorRawParameter(id, addr, I2C_BPS_REG, 1, 1, bps);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     if (bps != readBPS(id, addr)) {
@@ -1806,9 +1859,102 @@ int8_t UnitRollerCAN::receiveData()
     return ROLLER_UNEXPECTED_RESPONSE;
 }
 
+void UnitRollerCAN::clearPendingResponses()
+{
+    twai_message_t stale = {};
+    while (twai_receive(&stale, 0) == ESP_OK) {
+    }
+}
+
+int8_t UnitRollerCAN::receiveStatusResponse(uint8_t id)
+{
+    unsigned long started = millis();
+    while (millis() - started < 300) {
+        twai_message_t frame = {};
+        if (twai_receive(&frame, pdMS_TO_TICKS(10)) != ESP_OK) {
+            continue;
+        }
+
+        uint8_t command = static_cast<uint8_t>((frame.identifier >> 24) & 0x1F);
+        uint8_t motorId = static_cast<uint8_t>(frame.identifier >> 8);
+        uint8_t hostId  = static_cast<uint8_t>(frame.identifier);
+        if (!frame.extd || frame.rtr || frame.data_length_code != 8 || command != ROLLERCAN_STATUS_CMD ||
+            motorId != id || hostId != 0) {
+            continue;
+        }
+
+        recv_motorId   = motorId;
+        recv_faultInfo = static_cast<uint8_t>((frame.identifier >> 16) & 0x07);
+        recv_mode      = static_cast<uint8_t>((frame.identifier >> 19) & 0x07);
+        recv_status    = static_cast<uint8_t>((frame.identifier >> 22) & 0x03);
+        memcpy(readData, frame.data, sizeof(readData));
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return ROLLER_SERIAL_TIMEOUT;
+}
+
+int8_t UnitRollerCAN::receiveCommandResponse(uint8_t id, uint8_t command, uint8_t expectedCommandParameter,
+                                             uint8_t expectedHostId, uint8_t *response)
+{
+    unsigned long started = millis();
+    while (millis() - started < 300) {
+        twai_message_t frame = {};
+        if (twai_receive(&frame, pdMS_TO_TICKS(10)) != ESP_OK) {
+            continue;
+        }
+
+        uint8_t responseCommand  = static_cast<uint8_t>((frame.identifier >> 24) & 0x1F);
+        uint8_t commandParameter = static_cast<uint8_t>(frame.identifier >> 16);
+        uint8_t hostId           = static_cast<uint8_t>(frame.identifier >> 8);
+        uint8_t motorId          = static_cast<uint8_t>(frame.identifier);
+        if (!frame.extd || frame.rtr || frame.data_length_code != 8 || responseCommand != command ||
+            commandParameter != expectedCommandParameter || hostId != expectedHostId || motorId != id) {
+            continue;
+        }
+
+        if (response != nullptr) {
+            memcpy(response, frame.data, 8);
+        }
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return ROLLER_SERIAL_TIMEOUT;
+}
+
+int8_t UnitRollerCAN::receiveParameterResponse(uint8_t id, uint8_t command, uint16_t parameterId, int32_t *value)
+{
+    if (value == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    unsigned long started = millis();
+    while (millis() - started < 300) {
+        twai_message_t frame = {};
+        if (twai_receive(&frame, pdMS_TO_TICKS(10)) != ESP_OK) {
+            continue;
+        }
+
+        uint8_t responseCommand  = static_cast<uint8_t>((frame.identifier >> 24) & 0x1F);
+        uint8_t commandParameter = static_cast<uint8_t>(frame.identifier >> 16);
+        uint8_t hostId           = static_cast<uint8_t>(frame.identifier >> 8);
+        uint8_t motorId          = static_cast<uint8_t>(frame.identifier);
+        if (!frame.extd || frame.rtr || frame.data_length_code != 8 || responseCommand != command || hostId != 0 ||
+            motorId != id || commandParameter != 0 || readUint16LE(frame.data) != parameterId || frame.data[2] != 0 ||
+            frame.data[3] != 0) {
+            continue;
+        }
+
+        *value = readInt32LE(frame.data + 4);
+        memcpy(readData, frame.data, sizeof(readData));
+        recv_motorId = motorId;
+        return ROLLER_WRITE_SUCCESS;
+    }
+    return ROLLER_SERIAL_TIMEOUT;
+}
+
 int8_t UnitRollerCAN::setMotorParameter(uint8_t id, uint16_t parameterId, int32_t parameterData)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     canData[0] = (parameterId & 0xFF);
     canData[1] = (parameterId >> 8) & 0xFF;
@@ -1820,14 +1966,15 @@ int8_t UnitRollerCAN::setMotorParameter(uint8_t id, uint16_t parameterId, int32_
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return result;
 }
 
 int8_t UnitRollerCAN::setMotorPID(uint8_t id, uint16_t parameterId, uint32_t parameterData)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     canData[0] = (parameterId & 0xFF);
     canData[1] = (parameterId >> 8) & 0xFF;
@@ -1839,63 +1986,86 @@ int8_t UnitRollerCAN::setMotorPID(uint8_t id, uint16_t parameterId, uint32_t par
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return result;
+}
+
+int8_t UnitRollerCAN::requestParameterValue(uint8_t id, uint8_t command, uint8_t address, uint16_t parameterId,
+                                            int32_t *value)
+{
+    if (value == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
+    acquireMutex();
+    clearPendingResponses();
+    memset(canData, 0, sizeof(canData));
+    canData[0] = (parameterId & 0xFF);
+    canData[1] = (parameterId >> 8) & 0xFF;
+    if (command == ROLLERCAN_READ_I2C_CMD) {
+        canData[2] = address;
+    }
+    if (!sendData(id, command, 0, canData)) {
+        releaseMutex();
+        return ROLLER_SERIAL_SEND_FAILURE;
+    }
+    int8_t result = receiveParameterResponse(id, command, parameterId, value);
+    releaseMutex();
+    return result;
 }
 
 int32_t UnitRollerCAN::getMotorParameter(uint8_t id, uint16_t parameterId)
 {
-    acquireMutex();
-    memset(canData, 0, sizeof(canData));
-    canData[0] = (parameterId & 0xFF);
-    canData[1] = (parameterId >> 8) & 0xFF;
-    if (!sendData(id, ROLLERCAN_READ_CMD, 0, canData)) {
-        releaseMutex();
-        return ROLLER_WRITE_SUCCESS;
-    }
-    int8_t result = receiveData();
-    if (result < 0) {
-        releaseMutex();
-        return result;
-    }
-    int32_t returnValue = handleValue(readData[4], readData[5], readData[6], readData[7]);
+    int32_t value = 0;
+    int8_t result = requestParameterValue(id, ROLLERCAN_READ_CMD, 0, parameterId, &value);
 #if defined UNIT_ROLLER_DEBUG
-    Serial.printf("Value:%d\n", returnValue);
+    if (result == ROLLER_WRITE_SUCCESS) {
+        Serial.printf("Value:%d\n", value);
+    }
 #else
 #endif
-    releaseMutex();
-    return returnValue;
+    return result == ROLLER_WRITE_SUCCESS ? value : result;
+}
+
+int32_t UnitRollerCAN::getScaledMotorParameter(uint8_t id, uint16_t parameterId, int32_t divisor)
+{
+    int32_t value = 0;
+    int8_t result = requestParameterValue(id, ROLLERCAN_READ_CMD, 0, parameterId, &value);
+    return result == ROLLER_WRITE_SUCCESS ? value / divisor : result;
 }
 
 int32_t UnitRollerCAN::readMotorParameter(uint8_t id, uint8_t addr, uint16_t parameterId)
 {
-    acquireMutex();
-    memset(canData, 0, sizeof(canData));
-    canData[0] = (parameterId & 0xFF);
-    canData[1] = (parameterId >> 8) & 0xFF;
-    canData[2] = addr;
-    if (!sendData(id, ROLLERCAN_READ_I2C_CMD, 0, canData)) {
-        releaseMutex();
-        return ROLLER_WRITE_FAILED;
-    }
-    int8_t result = receiveData();
-    if (result < 0) {
-        releaseMutex();
-        return result;
-    }
-    int32_t returnValue = handleValue(readData[4], readData[5], readData[6], readData[7]);
+    int32_t value = 0;
+    int8_t result = requestParameterValue(id, ROLLERCAN_READ_I2C_CMD, addr, parameterId, &value);
 #if defined UNIT_ROLLER_DEBUG
-    Serial.printf("returnValue:%d\n", returnValue);
+    if (result == ROLLER_WRITE_SUCCESS) {
+        Serial.printf("returnValue:%d\n", value);
+    }
 #else
 #endif
-    releaseMutex();
-    return returnValue;
+    return result == ROLLER_WRITE_SUCCESS ? value : result;
+}
+
+int32_t UnitRollerCAN::readScaledMotorParameter(uint8_t id, uint8_t addr, uint16_t parameterId, int32_t divisor)
+{
+    int32_t value = 0;
+    int8_t result = requestParameterValue(id, ROLLERCAN_READ_I2C_CMD, addr, parameterId, &value);
+    return result == ROLLER_WRITE_SUCCESS ? value / divisor : result;
+}
+
+int32_t UnitRollerCAN::readScaledMotorRawParameter(uint8_t id, uint8_t addr, uint8_t reg, int32_t divisor)
+{
+    int32_t value = 0;
+    int8_t result = requestRawParameterValue(id, addr, reg, &value);
+    return result == ROLLER_WRITE_SUCCESS ? value / divisor : result;
 }
 
 int8_t UnitRollerCAN::writeMotorParameter(uint8_t id, uint8_t addr, uint16_t parameterId, int32_t parameterData)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     canData[0] = (parameterId & 0xFF);
     canData[1] = (parameterId >> 8) & 0xFF;
@@ -1908,13 +2078,14 @@ int8_t UnitRollerCAN::writeMotorParameter(uint8_t id, uint8_t addr, uint16_t par
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return result;
 }
 int8_t UnitRollerCAN::writeMotorPID(uint8_t id, uint8_t addr, uint16_t parameterId, uint32_t parameterData)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     canData[0] = (parameterId & 0xFF);
     canData[1] = (parameterId >> 8) & 0xFF;
@@ -1927,19 +2098,31 @@ int8_t UnitRollerCAN::writeMotorPID(uint8_t id, uint8_t addr, uint16_t parameter
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveStatusResponse(id);
     releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return result;
 }
 
 int32_t UnitRollerCAN::readMotorRawParameter(uint8_t id, uint8_t addr, uint8_t reg)
 {
+    int32_t value = 0;
+    int8_t result = requestRawParameterValue(id, addr, reg, &value);
+    return result == ROLLER_WRITE_SUCCESS ? value : result;
+}
+
+int8_t UnitRollerCAN::requestRawParameterValue(uint8_t id, uint8_t addr, uint8_t reg, int32_t *value)
+{
+    if (value == nullptr) {
+        return ROLLER_UNEXPECTED_RESPONSE;
+    }
+
     memset(canData, 0, sizeof(canData));
     int8_t result = writeMotorRawParameter(id, addr, reg, 1, 0, 0);
-    if (result < 0) {
+    if (result != ROLLER_WRITE_SUCCESS) {
         return result;
     }
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     canData[0] = addr;
     canData[1] = 4;
@@ -1947,20 +2130,23 @@ int32_t UnitRollerCAN::readMotorRawParameter(uint8_t id, uint8_t addr, uint8_t r
         releaseMutex();
         return ROLLER_WRITE_FAILED;
     }
-    int8_t res = receiveData();
-    if (res < 0) {
+    uint8_t response[8] = {};
+    int8_t res          = receiveCommandResponse(id, ROLLERCAN_READ_I2C_RAW_CMD, 1, 0, response);
+    if (res != ROLLER_WRITE_SUCCESS) {
         releaseMutex();
         return res;
     }
-    int32_t returnValue = handleValue(readData[0], readData[1], readData[2], readData[3]);
+    memcpy(readData, response, sizeof(readData));
+    *value = readInt32LE(response);
     releaseMutex();
-    return returnValue;
+    return ROLLER_WRITE_SUCCESS;
 }
 
 int8_t UnitRollerCAN::writeMotorRawParameter(uint8_t id, uint8_t addr, uint8_t reg, uint8_t option, uint8_t len,
                                              int32_t parameterData)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     uint8_t new_value;
     canData[0] = len + 1;
@@ -1978,15 +2164,16 @@ int8_t UnitRollerCAN::writeMotorRawParameter(uint8_t id, uint8_t addr, uint8_t r
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveCommandResponse(id, ROLLERCAN_WRITE_I2C_RAW_CMD, static_cast<uint8_t>(new_value | 0x01), 0);
     releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return result;
 }
 
 int8_t UnitRollerCAN::writeMotorRawPID(uint8_t id, uint8_t addr, uint8_t reg, uint8_t option, uint8_t len,
                                        uint32_t parameterData)
 {
     acquireMutex();
+    clearPendingResponses();
     memset(canData, 0, sizeof(canData));
     uint8_t new_value;
     canData[0] = len + 1;
@@ -2004,7 +2191,7 @@ int8_t UnitRollerCAN::writeMotorRawPID(uint8_t id, uint8_t addr, uint8_t reg, ui
         releaseMutex();
         return ROLLER_SERIAL_SEND_FAILURE;
     }
-    receiveData();
+    int8_t result = receiveCommandResponse(id, ROLLERCAN_WRITE_I2C_RAW_CMD, static_cast<uint8_t>(new_value | 0x01), 0);
     releaseMutex();
-    return ROLLER_WRITE_SUCCESS;
+    return result;
 }

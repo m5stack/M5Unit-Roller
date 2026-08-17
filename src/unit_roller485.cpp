@@ -128,18 +128,12 @@ size_t UnitRoller485::readData()
         delay(1);
     }
 
-    // Clean data to remove header "AA 55"
-    size_t writeIndex = 0;
-    for (size_t i = 0; i < bytesRead; i++) {
-        if (i + 1 < bytesRead && buffer[i] == 0xAA && buffer[i + 1] == 0x55) {
-            // Skip header
-            i++;  // Move to the next byte
-        } else {
-            // Copy data to a new location
-            buffer[writeIndex++] = buffer[i];
-        }
+    // The sync marker is valid only at the beginning of a response. Payload
+    // bytes must remain untouched because a legal value may also contain AA 55.
+    if (bytesRead >= 2 && buffer[0] == 0xAA && buffer[1] == 0x55) {
+        bytesRead -= 2;
+        memmove(buffer, buffer + 2, bytesRead);
     }
-    bytesRead = writeIndex;  // Update bytesRead after cleaning
     // Print cleaned data
 #if defined UNIT_ROLLER_DEBUG
     serialPrint("Received data after cleaning: ");
